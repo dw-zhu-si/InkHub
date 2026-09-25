@@ -1,0 +1,52 @@
+appId: com.zhusi.inkhub
+productName: 墨枢
+artifactName: "InkHub-${version}-${os}-${arch}-test.${ext}"
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+  - from: ../../THIRD_PARTY_LICENSES.txt
+    to: THIRD_PARTY_LICENSES.txt
+  - from: ../../node_modules/electron/dist/LICENSE
+    to: LICENSE.electron.txt
+  - from: ../../node_modules/electron/dist/LICENSES.chromium.html
+    to: LICENSES.chromium.html
+
+asar: true
+beforeBuild: ./scripts/electron-builder-before-build.cjs
+afterPack: ./scripts/electron-builder-after-pack.cjs
+
+mac:
+  target:
+    - dmg
+    - zip
+  icon: build/icon.icns
+  category: public.app-category.productivity
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false
+
+win:
+  target: nsis
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+  forceCodeSigning: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: 墨枢
+  deleteAppDataOnUninstall: false

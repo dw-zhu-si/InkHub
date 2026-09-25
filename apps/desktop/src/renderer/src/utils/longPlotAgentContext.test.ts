@@ -1,0 +1,152 @@
+import { describe, expect, it } from "vitest";
+import type { LongWorkspaceNavigationSnapshot } from "@deepwrite/contracts";
+import type { LongWorkspaceSelection } from "../types/longWorkspace";
+import { buildLongPlotFocusSnapshot } from "./longPlotAgentContext";
+
+const navigation: LongWorkspaceNavigationSnapshot = {
+  schemaVersion: 1,
+  revision: 3,
+  bookId: "longbook_plot_focus",
+  updatedAt: "2026-07-30T10:00:00.000Z",
+  counts: {
+    worldbuildingCategories: 0,
+    characters: 0,
+    volumes: 2,
+    arcs: 1,
+    chapterCards: 1,
+    storyEvents: 0,
+    storyPlots: 0,
+    foreshadowingThreads: 0,
+    committedChapters: 0
+  },
+  worldbuilding: [],
+  characterTypes: [{ id: "protagonist", title: "主角", order: 1 }],
+  characters: [],
+  volumes: [
+    { id: "volume_one", title: "第一卷", order: 1 },
+    { id: "volume_two", title: "第二卷", order: 2 }
+  ],
+  arcs: [
+    { id: "arc_main", volumeId: "volume_one", title: "主线", order: 1 }
+  ],
+  chapterCards: [
+    {
+      id: "chapter_one",
+      volumeId: "volume_one",
+      primaryArcId: "arc_main",
+      title: "第一章",
+      narrativeOrder: 1,
+      bodyStatus: "empty"
+    }
+  ],
+  committedThroughChapterId: null
+};
+
+function plotSelection(
+  overrides: Partial<LongWorkspaceSelection>
+): LongWorkspaceSelection {
+  return {
+    key: "plot-design:book-line",
+    root: "plot_design",
+    title: "全书故事线",
+    breadcrumbs: ["雾港", "剧情设计", "全书故事线"],
+    files: [],
+    preferredRole: "book-line",
+    ...overrides
+  };
+}
+
+describe("long plot agent context", () => {
+  it("captures book-line and foreshadowing sections", () => {
+    expect(
+      buildLongPlotFocusSnapshot({
+        selection: plotSelection({}),
+        navigation
+      })
+    ).toEqual({ section: "book_line" });
+    expect(
+      buildLongPlotFocusSnapshot({
+        selection: plotSelection({
+          key: "plot-design:foreshadowing",
+          title: "伏笔总览"
+        }),
+        navigation
+      })
+    ).toEqual({ section: "foreshadowing" });
+  });
+
+  it("captures the focused plot point with its volume", () => {
+    expect(
+      buildLongPlotFocusSnapshot({
+        selection: plotSelection({
+          key: "plot-design:plot-points:volume_one",
+          plotPointVolumeId: "volume_one",
+          plotPointId: "arc_main",
+          title: "主线"
+        }),
+        navigation
+      })
+    ).toEqual({
+      section: "plot_point",
+      volumeId: "volume_one",
+      volumeTitle: "第一卷",
+      arcId: "arc_main",
+      arcTitle: "主线"
+    });
+  });
+
+  it("captures an empty volume plot-point list without an arc", () => {
+    expect(
+      buildLongPlotFocusSnapshot({
+        selection: plotSelection({
+          key: "plot-design:plot-points:volume_two",
+          plotPointVolumeId: "volume_two",
+          title: "第二卷"
+        }),
+        navigation
+      })
+    ).toEqual({
+      section: "plot_point",
+      volumeId: "volume_two",
+      volumeTitle: "第二卷"
+    });
+  });
+
+  it("captures the focused chapter card with its volume", () => {
+    expect(
+      buildLongPlotFocusSnapshot({
+        selection: plotSelection({
+          key: "plot-design:chapter-cards:volume_one",
+          chapterCardVolumeId: "volume_one",
+          chapterCardId: "chapter_one",
+          title: "第一章"
+        }),
+        navigation
+      })
+    ).toEqual({
+      section: "chapter_card",
+      volumeId: "volume_one",
+      volumeTitle: "第一卷",
+      chapterCardId: "chapter_one",
+      chapterCardTitle: "第一章"
+    });
+  });
+
+  it("skips other roots and unknown volumes", () => {
+    expect(
+      buildLongPlotFocusSnapshot({
+        selection: null,
+        navigation
+      })
+    ).toBeUndefined();
+    expect(
+      buildLongPlotFocusSnapshot({
+        selection: plotSelection({
+          key: "plot-design:plot-points:volume_missing",
+          plotPointVolumeId: "volume_missing"
+        }),
+        navigation
+      })
+    ).toBeUndefined();
+  });
+});

@@ -1,0 +1,20 @@
+{
+  "name": "@deepwrite/shared",
+  "version": "0.1.0",
+  "description": "InkHub shared utilities; legacy package name retained for compatibility",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/dw-zhu-si/InkHub#readme",
+  "bugs": {
+    "url": "https://github.com/dw-zhu-si/InkHub/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dw-zhu-si/InkHub.git",
+    "directory": "packages/shared"
+  },
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

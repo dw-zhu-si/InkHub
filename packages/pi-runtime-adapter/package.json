@@ -1,0 +1,26 @@
+{
+  "name": "@deepwrite/pi-runtime-adapter",
+  "version": "0.1.0",
+  "description": "InkHub Agent Runtime adapter; legacy package name retained for compatibility",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/dw-zhu-si/InkHub#readme",
+  "bugs": {
+    "url": "https://github.com/dw-zhu-si/InkHub/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dw-zhu-si/InkHub.git",
+    "directory": "packages/pi-runtime-adapter"
+  },
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepwrite/contracts": "workspace:*",
+    "@earendil-works/pi-agent-core": "0.84.1",
+    "@earendil-works/pi-ai": "0.84.1",
+    "typebox": "1.3.7"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@deepwrite/contracts",
+  "version": "0.1.0",
+  "description": "InkHub IPC and domain contracts; legacy package name retained for compatibility",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/dw-zhu-si/InkHub#readme",
+  "bugs": {
+    "url": "https://github.com/dw-zhu-si/InkHub/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dw-zhu-si/InkHub.git",
+    "directory": "packages/contracts"
+  },
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./renderer": "./src/renderer.ts",
+    "./system": "./src/system.ts"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

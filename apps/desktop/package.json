@@ -1,0 +1,50 @@
+{
+  "name": "@deepwrite/desktop",
+  "version": "0.3.1",
+  "description": "墨枢（InkHub）本地 AI 小说创作与管理桌面端",
+  "author": "zhusi",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/dw-zhu-si/InkHub#readme",
+  "bugs": {
+    "url": "https://github.com/dw-zhu-si/InkHub/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dw-zhu-si/InkHub.git",
+    "directory": "apps/desktop"
+  },
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "predev": "node ../../tools/ensure-electron-runtime.mjs",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build && node ../../tools/check-renderer-build.mjs",
+    "prepreview": "node ../../tools/ensure-electron-runtime.mjs",
+    "preview": "electron-vite preview",
+    "presmoke": "node ../../tools/ensure-electron-runtime.mjs",
+    "smoke": "node scripts/electron-smoke.mjs",
+    "acceptance": "node scripts/electron-acceptance.mjs",
+    "pack:mas:arm64": "node scripts/run-mas-package.mjs"
+  },
+  "dependencies": {
+    "@deepwrite/contracts": "workspace:*",
+    "@deepwrite/pi-runtime-adapter": "workspace:*",
+    "@deepwrite/shared": "workspace:*",
+    "electron-updater": "6.8.9",
+    "naive-ui": "2.44.1",
+    "pdfjs-dist": "6.2.108",
+    "pinia": "3.0.4",
+    "vue": "3.5.39"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.0",
+    "@vitejs/plugin-vue": "6.0.8",
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "typescript": "6.0.3",
+    "vite": "7.3.6",
+    "vue-tsc": "3.3.11"
+  }
+}

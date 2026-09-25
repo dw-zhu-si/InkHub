@@ -1,0 +1,59 @@
+{
+  "name": "inkhub",
+  "version": "0.3.1",
+  "description": "墨枢（InkHub）本地 AI 小说创作与管理应用",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/dw-zhu-si/InkHub#readme",
+  "bugs": {
+    "url": "https://github.com/dw-zhu-si/InkHub/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dw-zhu-si/InkHub.git"
+  },
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "runtime:check": "node tools/check-runtime.mjs",
+    "dev": "pnpm --filter @deepwrite/desktop dev",
+    "electron:ensure": "node tools/ensure-electron-runtime.mjs",
+    "build": "pnpm --filter @deepwrite/desktop build",
+    "typecheck": "vue-tsc --noEmit -p apps/desktop/tsconfig.web.json && tsc --noEmit -p apps/desktop/tsconfig.node.json && tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/pi-runtime-adapter/tsconfig.json",
+    "lint": "node tools/check-renderer-boundary.mjs",
+    "test": "vitest run --maxWorkers=2",
+    "test:critical-coverage": "vitest run --config vitest.critical.config.ts --coverage --maxWorkers=2",
+    "complexity:check": "node tools/check-source-complexity.mjs",
+    "smoke": "pnpm --filter @deepwrite/desktop smoke",
+    "acceptance": "pnpm --filter @deepwrite/desktop acceptance",
+    "smoke:renderer": "node tools/check-renderer-build.mjs",
+    "verify": "pnpm runtime:check && pnpm typecheck && pnpm lint && pnpm complexity:check && pnpm test && pnpm test:critical-coverage && pnpm build",
+    "pack:test": "node tools/run-test-package.mjs all",
+    "pack:test:win:arm64": "node tools/run-test-package.mjs win arm64",
+    "pack:test:win": "node tools/run-test-package.mjs win x64",
+    "pack:test:win:all": "node tools/run-test-package.mjs win all",
+    "pack:test:mac:arm64": "node tools/run-test-package.mjs mac arm64",
+    "pack:test:mac:x64": "node tools/run-test-package.mjs mac x64",
+    "pack:test:mac": "node tools/run-test-package.mjs mac all",
+    "pack:release:mac:arm64": "node tools/run-release-package.mjs mac arm64",
+    "pack:release:mac:x64": "node tools/run-release-package.mjs mac x64",
+    "index:migrate:v6": "node apps/desktop/scripts/migrate-novel-index-v6.mjs",
+    "index:verify:real": "node apps/desktop/scripts/verify-real-index-v6.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.0",
+    "@vitejs/plugin-vue": "6.0.8",
+    "@vitest/coverage-v8": "4.1.11",
+    "@vue/tsconfig": "0.9.1",
+    "electron": "44.0.0",
+    "electron-vite": "5.0.0",
+    "typescript": "6.0.3",
+    "vite": "7.3.6",
+    "vitest": "4.1.11",
+    "vue-tsc": "3.3.11"
+  }
+}

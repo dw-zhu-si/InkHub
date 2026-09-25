@@ -1,0 +1,22 @@
+InkHub / 墨枢
+
+This product includes software derived from DeepWrite:
+https://github.com/swjybky/deepwrite
+
+The upstream software is made available under the Apache License, Version 2.0.
+The full license text is provided in LICENSE. The InkHub source distribution
+contains substantial independent modifications; see UPSTREAM.md and
+MODIFICATIONS.md for provenance and scope.
+
+InkHub is independently maintained. It is not an official DeepWrite release,
+and neither the upstream project nor its contributors are represented as
+endorsing InkHub.
+
+Some internal @deepwrite/* package names, deepwrite.json filenames, IPC
+identifiers, and storage keys are retained solely for legacy compatibility.
+Their presence does not indicate brand affiliation.
+
+Third-party notices and license texts are provided in
+THIRD_PARTY_NOTICES.md and THIRD_PARTY_LICENSES.txt.
+
+This NOTICE is informational and does not modify the Apache License 2.0.

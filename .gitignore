@@ -1,0 +1,26 @@
+node_modules/
+.pnpm-store/
+out/
+release/
+dist/
+coverage/
+/artifacts/
+/work/
+/apps/desktop/release/
+*.log
+.env
+.env.*
+!.env.example
+# Apple signing and App Store profiles are local credentials/artifacts.
+*.p8
+*.p12
+*.cer
+*.keychain-db
+*.mobileprovision
+*.provisionprofile
+# Local-only public-data endpoint tests may contain private deployment details.
+/apps/desktop/src/main/deepwrite-public-data-config.test.ts
+.DS_Store
+.idea/
+.vscode/
+/docs/

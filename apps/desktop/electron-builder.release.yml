@@ -1,0 +1,34 @@
+extends: ./electron-builder.yml
+
+artifactName: "InkHub-${version}-${os}-${arch}.${ext}"
+forceCodeSigning: true
+
+mac:
+  target:
+    - dmg
+    - zip
+  icon: build/icon.icns
+  category: public.app-category.productivity
+  # The release runner discovers a valid Developer ID identity and injects
+  # only its non-secret name qualifier for this process.
+  identity: "${env.INKHUB_APPLE_SIGNING_IDENTITY}"
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # @electron/osx-sign 1.3.3 misclassifies these Electron data resources as
+  # binaries. A Developer ID signature then adds com.apple.cs.* xattrs, and
+  # the outer app signature rejects them as resource-fork detritus.
+  signIgnore:
+    - "\\.(?:bin|dat|nib|pak)$"
+  notarize: true
+
+dmg:
+  sign: true
+  # Stapling changes the image bytes; upstream update channels are disabled.
+  writeUpdateInfo: false
+
+win:
+  target: nsis
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+  forceCodeSigning: false

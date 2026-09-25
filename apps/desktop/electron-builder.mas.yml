@@ -1,0 +1,30 @@
+extends: ./electron-builder.yml
+
+# Mac App Store builds use the MAS Electron runtime and a separate Apple
+# Distribution signing path. They must never inherit Developer ID notarization.
+artifactName: "InkHub-${version}-mas-${arch}.${ext}"
+forceCodeSigning: true
+
+mac:
+  target:
+    - mas
+  icon: build/icon.icns
+  category: public.app-category.productivity
+  notarize: false
+
+mas:
+  artifactName: "InkHub-${version}-mas-${arch}.${ext}"
+  # The MAS runner derives the name qualifier and Team ID from the selected
+  # provisioning profile and matching local identities.
+  identity: "${env.INKHUB_APPLE_SIGNING_IDENTITY}"
+  type: distribution
+  bundleVersion: "1"
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  notarize: false
+  entitlements: build/entitlements.mas.plist
+  entitlementsInherit: build/entitlements.mas.inherit.plist
+  signIgnore:
+    - "\\.(?:bin|dat|nib|pak)$"
+  extendInfo:
+    ElectronTeamID: "${env.INKHUB_APPLE_TEAM_ID}"

@@ -1,13 +1,13 @@
 墨枢（InkHub）第三方许可证与版权声明
 
-应用版本：0.3.0
+应用版本：0.3.1
 pnpm-lock.yaml SHA-256：bebdb8681cea5391f778a6e6b4109d0d19c08264dd81a661e74fde1b93681fe7
 生成命令：node tools/generate-third-party-licenses.mjs
 只读复验：node tools/generate-third-party-licenses.mjs --check
 
 范围：桌面端已安装 production 依赖闭包（包含其依赖和 peer；不读取未保存依赖或直接开发工具）。
 采用保守覆盖：即使某个依赖或附带字体/解码器被 tree-shaking 排除，仍保留其许可。
-工作区自身代码及 DeepWrite 许可另见随包 LICENSE 和 THIRD_PARTY_NOTICES.md。
+工作区自身代码及上游基础许可另见随包 LICENSE、NOTICE、UPSTREAM.md 和 THIRD_PARTY_NOTICES.md。
 本文件不包含用户小说、模型凭据、本机路径或安装环境配置。
 
 许可记录：175（含 Electron 44.0.0）

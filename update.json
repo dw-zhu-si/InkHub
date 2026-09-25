@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "enabled": false,
+  "channel": "stable",
+  "version": "0.3.1",
+  "title": "墨枢 0.3.1",
+  "publishedAt": "2026-09-07T20:00:00+08:00",
+  "releaseNotes": ["墨枢当前未配置更新源，自动更新已停用。"],
+  "mandatory": false,
+  "minimumSupportedVersion": "0.3.0",
+  "releasePage": "https://github.com/dw-zhu-si/InkHub/releases/tag/v0.3.1",
+  "feedUrl": "https://github.com/dw-zhu-si/InkHub/releases/latest/download"
+}
