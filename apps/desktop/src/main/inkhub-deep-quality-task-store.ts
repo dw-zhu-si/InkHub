@@ -16,23 +16,31 @@ export interface InkHubDeepQualityTaskRepository {
 }
 
 export class InkHubDeepQualityTaskStore implements InkHubDeepQualityTaskRepository {
-  private readonly database: DatabaseSync;
+  private databaseInstance: DatabaseSync | null = null;
+  private readonly databasePath: string;
 
   constructor(storageDirectory: string) {
+    this.databasePath = join(storageDirectory, "deep-quality-tasks.sqlite");
+  }
+
+  private database(): DatabaseSync {
+    if (this.databaseInstance) return this.databaseInstance;
+    const storageDirectory = join(this.databasePath, "..");
     mkdirSync(storageDirectory, { recursive: true, mode: 0o700 });
-    const path = join(storageDirectory, "deep-quality-tasks.sqlite");
-    this.database = new DatabaseSync(path);
-    chmodSync(path, 0o600);
-    this.database.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
-    this.database.exec(`CREATE TABLE IF NOT EXISTS deep_quality_tasks (
+    const database = new DatabaseSync(this.databasePath);
+    chmodSync(this.databasePath, 0o600);
+    database.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
+    database.exec(`CREATE TABLE IF NOT EXISTS deep_quality_tasks (
       entry_id TEXT PRIMARY KEY,
       task_json TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );`);
+    this.databaseInstance = database;
+    return database;
   }
 
   get(entryId: string): InkHubDeepQualityTask | null {
-    const row = this.database.prepare("SELECT task_json FROM deep_quality_tasks WHERE entry_id = ?")
+    const row = this.database().prepare("SELECT task_json FROM deep_quality_tasks WHERE entry_id = ?")
       .get(entryId) as unknown as TaskRow | undefined;
     if (!row) return null;
     try {
@@ -44,10 +52,15 @@ export class InkHubDeepQualityTaskStore implements InkHubDeepQualityTaskReposito
 
   put(rawTask: InkHubDeepQualityTask): InkHubDeepQualityTask {
     const task = InkHubDeepQualityTaskSchema.parse(rawTask);
-    this.database.prepare(
+    this.database().prepare(
       "INSERT OR REPLACE INTO deep_quality_tasks(entry_id,task_json,updated_at) VALUES (?,?,?)"
     ).run(task.entryId, JSON.stringify(task), task.updatedAt);
     return task;
+  }
+
+  close(): void {
+    this.databaseInstance?.close();
+    this.databaseInstance = null;
   }
 }
 

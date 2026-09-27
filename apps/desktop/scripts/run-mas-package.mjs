@@ -46,6 +46,12 @@ export function masBuildEnvironment(source, additions = {}) {
   };
 }
 
+export function masBuildVersion(configSource) {
+  const match = /^buildVersion:\s*["']?([1-9][0-9]*)["']?\s*$/mu.exec(configSource);
+  if (!match) throw new Error("MAS 配置缺少有效的正整数 buildVersion。");
+  return match[1];
+}
+
 export function validateMasProfilePayload(decoded, now = Date.now(), expectedTeamId = "") {
   const entitlements = decoded?.Entitlements ?? {};
   const applicationIdentifier = entitlements["com.apple.application-identifier"] ??
@@ -225,6 +231,9 @@ async function main() {
     INKHUB_APPLE_TEAM_ID: signing.teamId
   });
   const appPackage = JSON.parse(await readFile(join(DESKTOP_ROOT, "package.json"), "utf8"));
+  const buildVersion = masBuildVersion(
+    await readFile(join(DESKTOP_ROOT, "electron-builder.mas.yml"), "utf8")
+  );
   const electronPackage = JSON.parse(await readFile(join(WORKSPACE_ROOT, "node_modules/electron/package.json"), "utf8"));
   const base = `InkHub-${appPackage.version}-mas-arm64`;
   const releaseDirectory = join(DESKTOP_ROOT, "release");
@@ -245,8 +254,11 @@ async function main() {
     });
     await run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.mas.yml",
       `--config.electronVersion=${electronPackage.version}`,
+      `--config.buildVersion=${buildVersion}`,
       `--config.directories.output=${output}`,
       `--config.mas.provisioningProfile=${signing.profilePath}`,
+      `--config.mas.identity=${signing.qualifier}`,
+      `--config.mas.extendInfo.ElectronTeamID=${signing.teamId}`,
       "--mac", "mas", "--arm64", "--publish", "never"], {
         cwd: DESKTOP_ROOT,
         environment: buildEnvironment
@@ -260,6 +272,7 @@ async function main() {
       appPath,
       packagePath,
       expectedVersion: appPackage.version,
+      expectedBuildVersion: buildVersion,
       expectedTeamId: signing.teamId,
       applicationIdentity: signing.applicationIdentity,
       installerIdentity: signing.installerIdentity

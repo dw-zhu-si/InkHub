@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { InkHubNovelAiRepairPlan } from "@deepwrite/contracts";
+import type {
+  InkHubNovelAiRepairPlan,
+  InkHubNovelAiRepairTask
+} from "@deepwrite/contracts";
 import {
   acceptedInkHubRepairDrafts,
-  createInkHubRepairReviewDrafts
+  createInkHubRepairReviewDrafts,
+  restorableInkHubRepairPlan
 } from "./inkhubRepairReview";
 
 function repairPlan(relativePath = "第一卷/第1章.md"): InkHubNovelAiRepairPlan {
@@ -51,5 +55,30 @@ describe("墨枢 AI 修复审阅状态", () => {
     const unsupported = createInkHubRepairReviewDrafts(repairPlan("第一卷/第1章.docx"));
     unsupported[0]!.decision = "accepted";
     expect(acceptedInkHubRepairDrafts(unsupported)).toEqual([]);
+  });
+
+  it("已写回消费的任务不再恢复为待审阅计划", () => {
+    const plan = repairPlan();
+    const task: InkHubNovelAiRepairTask = {
+      entryId: plan.entryId,
+      status: "consumed",
+      sourceContentHash: "b".repeat(64),
+      requestedModelId: plan.modelId,
+      progress: {
+        entryId: plan.entryId,
+        stage: "completed",
+        completedBatches: 1,
+        totalBatches: 1,
+        completedChapters: 1,
+        totalChapters: 1,
+        message: "已写回",
+        updatedAt: "2026-08-22T09:00:00.000Z"
+      },
+      plan,
+      lastError: null,
+      updatedAt: "2026-08-22T09:00:00.000Z"
+    };
+
+    expect(restorableInkHubRepairPlan(task)).toBeNull();
   });
 });

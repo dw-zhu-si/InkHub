@@ -18,12 +18,14 @@ describe("InkHubIndexCenter", () => {
     expect(source).toContain('aria-live="polite"');
   });
 
-  it("仅用模型列表端点探测已选服务，不发起可计费对话", () => {
+  it("只在用户明确点击后用模型列表端点探测服务", () => {
     expect(source).toContain("模型服务运行状态");
     expect(source).toContain("models.list()");
     expect(source).toContain("models.listRemote");
-    expect(source).toContain("重新检查");
-    expect(source).toContain("本次只读取模型目录，不会发起生成或计费请求");
+    expect(source).toContain("检查连接");
+    expect(source).toContain("点击检查会连接已配置的服务并携带所需凭证");
+    expect(source).toContain("void loadIndexStatuses();");
+    expect(source).not.toContain("Promise.all([loadIndexStatuses(), checkModelHub()])");
     expect(source).not.toContain("models.test(");
   });
 

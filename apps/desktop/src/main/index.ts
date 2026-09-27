@@ -280,6 +280,7 @@ let cloudBackupService: CloudBackupService | undefined;
 let inkHubAssetStore: InkHubAssetStore | undefined;
 let inkHubMediaService: InkHubMediaService | undefined;
 let inkHubAiRepairService: InkHubAiRepairService | undefined;
+let inkHubAiRepairTaskStore: InkHubAiRepairTaskStore | undefined;
 let inkHubDeepQualityCoordinator: InkHubDeepQualityCoordinator | undefined;
 let inkHubStoryKernelService: InkHubStoryKernelService | undefined;
 let installUpdateAfterShutdown = false;
@@ -1157,22 +1158,16 @@ function registerIpc(): void {
             await store.searchNovel(request.entryId, request.query, request.limit)
           );
         case "runNovelQualityCheck":
-          return InkHubNovelQualityReportSchema.parse(
-            await store.runNovelQualityCheck(request.entryId)
-          );
+          return InkHubNovelQualityReportSchema.parse(await store.runNovelQualityCheck(request.entryId));
         case "applyNovelChapterRepair":
           return InkHubNovelChapterRepairResultSchema.parse(
             await store.applyNovelChapterRepair({
-              entryId: request.entryId,
-              chapterId: request.chapterId,
-              expectedSourceRevision: request.expectedSourceRevision,
-              content: request.content
-            })
+              entryId: request.entryId, chapterId: request.chapterId,
+              expectedSourceRevision: request.expectedSourceRevision, content: request.content,
+              confirmWrite: request.confirmWrite })
           );
         case "createNovelContext":
-          return InkHubNovelContextPacketSchema.parse(
-            await store.createNovelContext(request.entryId, request.purpose)
-          );
+          return InkHubNovelContextPacketSchema.parse(await store.createNovelContext(request.entryId, request.purpose));
         case "getNovelReadingProgress": {
           const progress = await store.getNovelReadingProgress(request.entryId);
           return progress === null ? null : InkHubNovelReadingProgressSchema.parse(progress);
@@ -1239,7 +1234,7 @@ function registerIpc(): void {
       if (!isTrustedRendererEvent(event)) {
         throw new Error("墨枢 AI 修复 IPC 请求来源无效。");
       }
-      if (!inkHubAiRepairService || !inkHubDeepQualityCoordinator || !inkHubAssetStore) {
+      if (!inkHubAiRepairService || !inkHubAiRepairTaskStore || !inkHubDeepQualityCoordinator || !inkHubAssetStore) {
         throw new Error("墨枢 AI 修复服务尚未初始化。");
       }
       const request = InkHubRepairIpcRequestSchema.parse(rawRequest);
@@ -1284,10 +1279,11 @@ function registerIpc(): void {
           return InkHubNovelAiRepairTaskSchema.parse(
             inkHubAiRepairService.cancel(request.input)
           );
-        case "applyNovelChapterRepairs":
-          return InkHubNovelBatchRepairResultSchema.parse(
-            await inkHubAssetStore.applyNovelChapterRepairs(request.input)
-          );
+        case "applyNovelChapterRepairs": {
+          const result = await inkHubAssetStore.applyNovelChapterRepairs(request.input);
+          inkHubAiRepairTaskStore.consume(request.input.entryId);
+          return InkHubNovelBatchRepairResultSchema.parse(result);
+        }
       }
     }
   );
@@ -2640,6 +2636,9 @@ function registerIpc(): void {
         try {
           const apiKey = await requireModelConfigStore().resolveDraftApiKey({
             ...(command.payload.id ? { id: command.payload.id } : {}),
+            provider: command.payload.provider,
+            api: command.payload.api,
+            baseUrl: command.payload.baseUrl,
             ...(command.payload.apiKey ? { apiKey: command.payload.apiKey } : {}),
             ...(command.payload.clearApiKey ? { clearApiKey: true } : {})
           });
@@ -3584,10 +3583,13 @@ if (!hasSingleInstanceLock) {
         });
       }
     });
+    inkHubAiRepairTaskStore = new InkHubAiRepairTaskStore(
+      join(userDataPath, "indexes", "novels")
+    );
     inkHubAiRepairService = new InkHubAiRepairService({
       assets: inkHubAssetStore,
       models: modelConfigStore,
-      taskStore: new InkHubAiRepairTaskStore(join(userDataPath, "indexes", "novels")),
+      taskStore: inkHubAiRepairTaskStore,
       getDeepQualityReport: (entryId, sourceContentHash) => {
         const task = inkHubDeepQualityCoordinator?.getTask(entryId);
         return task?.status === "completed" && task.sourceContentHash === sourceContentHash

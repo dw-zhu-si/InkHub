@@ -17,6 +17,54 @@ type WorkerStatus = UtilityHealthPayload["status"];
 
 const MAX_PENDING_INTERNAL_COMMANDS = 32;
 
+const UTILITY_ENVIRONMENT_ALLOWLIST = [
+  // Runtime lookup and user-owned filesystem locations.
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "USERPROFILE",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "PROGRAMDATA",
+  "SystemRoot",
+  "WINDIR",
+  "COMSPEC",
+  "PATHEXT",
+  // Locale and time-zone behavior must match Main.
+  "LANG",
+  "LANGUAGE",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LC_MESSAGES",
+  "TZ",
+  // Public certificate paths needed by enterprise TLS environments.
+  "NODE_EXTRA_CA_CERTS",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  // Application-owned, non-secret utility configuration.
+  "NODE_ENV",
+  "DEEPWRITE_USER_DATA_PATH",
+  "DEEPWRITE_APP_MODE",
+  "DEEPWRITE_LEGACY_DATA_ROOT",
+  "DEEPWRITE_LEGACY_DATA_ROOTS",
+  // Packaged smoke and acceptance modes.
+  "DEEPWRITE_SMOKE",
+  "INKHUB_ACCEPTANCE"
+] as const;
+
+function createUtilityEnvironment(
+  source: NodeJS.ProcessEnv
+): Record<string, string> {
+  const environment: Record<string, string> = {};
+  for (const key of UTILITY_ENVIRONMENT_ALLOWLIST) {
+    const value = source[key];
+    if (typeof value === "string") environment[key] = value;
+  }
+  return environment;
+}
+
 export class UtilityCommandTimeoutError extends Error {
   constructor(message: string) {
     super(message);
@@ -122,7 +170,7 @@ class UtilityWorker {
     this.status = "starting";
     const child = utilityProcess.fork(this.entryPath, [], {
       serviceName: `deepwrite-${this.name}`,
-      env: { ...process.env }
+      env: createUtilityEnvironment(process.env)
     });
     this.child = child;
     this.pid = child.pid;

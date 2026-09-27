@@ -29,9 +29,15 @@ import {
   acceptedInkHubRepairDrafts,
   createInkHubRepairReviewDrafts,
   isWritableNovelRepairPath,
+  restorableInkHubRepairPlan,
   type InkHubRepairReviewDecision,
   type InkHubRepairReviewDraft
 } from "../utils/inkhubRepairReview";
+import {
+  calculateInkHubReadingPosition,
+  loadInkHubChapterThroughOffset,
+  scrollFractionForLoadedOffset
+} from "../utils/inkhubReadingProgress";
 
 const MAX_AI_REPAIR_CHAPTERS = 500;
 
@@ -48,6 +54,7 @@ const activeChapterId = ref<string | null>(null);
 const activePage = ref<InkHubNovelChapterPage | null>(null);
 const chapterContent = ref("");
 const chapterNextOffset = ref<number | null>(null);
+const chapterLoadedEndOffset = ref(0);
 const loading = ref(false);
 const readerBody = ref<HTMLElement | null>(null);
 const searchQuery = ref("");
@@ -90,9 +97,12 @@ const confirmDeepQualityOpen = ref(false);
 const deepQualityResumeMode = ref(false);
 let requestEpoch = 0;
 let progressTimer: ReturnType<typeof setTimeout> | null = null;
-let aiProgressTimer: ReturnType<typeof setInterval> | null = null;
-let storyProgressTimer: ReturnType<typeof setInterval> | null = null;
-let deepQualityProgressTimer: ReturnType<typeof setInterval> | null = null;
+let aiProgressTimer: ReturnType<typeof setTimeout> | null = null;
+let storyProgressTimer: ReturnType<typeof setTimeout> | null = null;
+let deepQualityProgressTimer: ReturnType<typeof setTimeout> | null = null;
+let aiProgressPollEpoch = 0;
+let storyProgressPollEpoch = 0;
+let deepQualityProgressPollEpoch = 0;
 
 const activeChapter = computed(() => chapters.value.find((chapter) => chapter.id === activeChapterId.value) ?? null);
 const indexReady = computed(() => summary.value?.status === "ready" || summary.value?.status === "partial");
@@ -152,13 +162,13 @@ async function loadSummary(): Promise<void> {
 }
 
 function restoreRepairPlan(task: InkHubNovelAiRepairTask | null): void {
-  aiRepairTask.value = task;
-  if (!task) return;
+  const plan = restorableInkHubRepairPlan(task);
+  aiRepairTask.value = task?.status === "consumed" ? null : task;
+  aiRepairProgress.value = task?.status === "consumed" ? null : task?.progress ?? null;
+  aiRepairPlan.value = plan;
+  aiRepairDrafts.value = plan ? createInkHubRepairReviewDrafts(plan) : [];
+  if (!task || task.status === "consumed") return;
   aiRepairProgress.value = task.progress;
-  if (task.plan.proposals.length) {
-    aiRepairPlan.value = task.plan;
-    aiRepairDrafts.value = createInkHubRepairReviewDrafts(task.plan);
-  }
   if (task.status === "failed") aiRepairError.value = task.lastError || "上次 AI 修复未完成，可从检查点继续。";
 }
 
@@ -276,14 +286,34 @@ async function openChapter(chapterId: string, offset = 0): Promise<void> {
   activeChapterId.value = chapterId;
   chapterContent.value = "";
   activePage.value = null;
+  chapterNextOffset.value = null;
+  chapterLoadedEndOffset.value = 0;
   try {
-    const page = await api().readNovelChapter(props.entry.id, chapterId, 0, 100_000);
+    const loaded = await loadInkHubChapterThroughOffset(
+      async (pageOffset, limit) => {
+        if (epoch !== requestEpoch || activeChapterId.value !== chapterId) {
+          throw new Error("章节切换已取消上一次阅读请求。");
+        }
+        return api().readNovelChapter(
+          props.entry.id,
+          chapterId,
+          pageOffset,
+          limit
+        );
+      },
+      offset,
+      100_000
+    );
     if (epoch !== requestEpoch || activeChapterId.value !== chapterId) return;
-    activePage.value = page;
-    chapterContent.value = page.content;
-    chapterNextOffset.value = page.nextOffset;
+    activePage.value = loaded.initialPage;
+    chapterContent.value = loaded.content;
+    chapterNextOffset.value = loaded.nextOffset;
+    chapterLoadedEndOffset.value = loaded.loadedEndOffset;
     await nextTick();
-    const fraction = page.totalCharacters ? Math.min(1, offset / page.totalCharacters) : 0;
+    const fraction = scrollFractionForLoadedOffset(
+      offset,
+      loaded.loadedEndOffset
+    );
     if (readerBody.value) readerBody.value.scrollTop = fraction * Math.max(0, readerBody.value.scrollHeight - readerBody.value.clientHeight);
   } catch (error: unknown) {
     if (epoch === requestEpoch) uiMessage.error(error instanceof Error ? error.message : "读取章节失败");
@@ -302,6 +332,7 @@ async function loadMoreChapter(): Promise<void> {
     if (activeChapterId.value !== chapterId) return;
     chapterContent.value += page.content;
     chapterNextOffset.value = page.nextOffset;
+    chapterLoadedEndOffset.value = page.endOffset;
   } catch (error: unknown) {
     uiMessage.error(error instanceof Error ? error.message : "继续读取本章失败");
   } finally {
@@ -446,7 +477,8 @@ async function applyRepair(): Promise<void> {
       entryId: props.entry.id,
       chapterId: chapter.id,
       expectedSourceRevision: chapter.sourceRevision,
-      content: repairContent.value
+      content: repairContent.value,
+      confirmWrite: true
     });
     confirmRepairOpen.value = false;
     closeRepair();
@@ -490,13 +522,19 @@ async function refreshDeepQualityProgress(): Promise<void> {
 }
 
 function startDeepQualityProgressPolling(): void {
-  if (deepQualityProgressTimer) clearInterval(deepQualityProgressTimer);
-  void refreshDeepQualityProgress();
-  deepQualityProgressTimer = setInterval(() => void refreshDeepQualityProgress(), 900);
+  stopDeepQualityProgressPolling();
+  const epoch = deepQualityProgressPollEpoch;
+  const poll = async (): Promise<void> => {
+    await refreshDeepQualityProgress();
+    if (epoch !== deepQualityProgressPollEpoch) return;
+    deepQualityProgressTimer = setTimeout(() => void poll(), 900);
+  };
+  void poll();
 }
 
 function stopDeepQualityProgressPolling(): void {
-  if (deepQualityProgressTimer) clearInterval(deepQualityProgressTimer);
+  deepQualityProgressPollEpoch += 1;
+  if (deepQualityProgressTimer) clearTimeout(deepQualityProgressTimer);
   deepQualityProgressTimer = null;
 }
 
@@ -555,13 +593,19 @@ async function refreshAiRepairProgress(): Promise<void> {
 }
 
 function startAiProgressPolling(): void {
-  if (aiProgressTimer) clearInterval(aiProgressTimer);
-  void refreshAiRepairProgress();
-  aiProgressTimer = setInterval(() => void refreshAiRepairProgress(), 800);
+  stopAiProgressPolling();
+  const epoch = aiProgressPollEpoch;
+  const poll = async (): Promise<void> => {
+    await refreshAiRepairProgress();
+    if (epoch !== aiProgressPollEpoch) return;
+    aiProgressTimer = setTimeout(() => void poll(), 800);
+  };
+  void poll();
 }
 
 function stopAiProgressPolling(): void {
-  if (aiProgressTimer) clearInterval(aiProgressTimer);
+  aiProgressPollEpoch += 1;
+  if (aiProgressTimer) clearTimeout(aiProgressTimer);
   aiProgressTimer = null;
 }
 
@@ -633,6 +677,9 @@ async function applyAcceptedAiRepairs(): Promise<void> {
     confirmBatchWriteOpen.value = false;
     aiRepairPlan.value = null;
     aiRepairDrafts.value = [];
+    aiRepairTask.value = null;
+    aiRepairProgress.value = null;
+    aiRepairError.value = null;
     summary.value = result.summary;
     chapters.value = [];
     nextCatalogOffset.value = 0;
@@ -659,13 +706,19 @@ async function refreshStoryProgress(): Promise<void> {
 }
 
 function startStoryProgressPolling(): void {
-  if (storyProgressTimer) clearInterval(storyProgressTimer);
-  void refreshStoryProgress();
-  storyProgressTimer = setInterval(() => void refreshStoryProgress(), 900);
+  stopStoryProgressPolling();
+  const epoch = storyProgressPollEpoch;
+  const poll = async (): Promise<void> => {
+    await refreshStoryProgress();
+    if (epoch !== storyProgressPollEpoch) return;
+    storyProgressTimer = setTimeout(() => void poll(), 900);
+  };
+  void poll();
 }
 
 function stopStoryProgressPolling(): void {
-  if (storyProgressTimer) clearInterval(storyProgressTimer);
+  storyProgressPollEpoch += 1;
+  if (storyProgressTimer) clearTimeout(storyProgressTimer);
   storyProgressTimer = null;
 }
 
@@ -747,13 +800,18 @@ function saveProgressNow(): void {
   const body = readerBody.value;
   const page = activePage.value;
   if (!body || !page || !activeChapterId.value) return;
-  const available = Math.max(1, body.scrollHeight - body.clientHeight);
-  const scrollFraction = Math.max(0, Math.min(1, body.scrollTop / available));
+  const position = calculateInkHubReadingPosition({
+    scrollTop: body.scrollTop,
+    scrollHeight: body.scrollHeight,
+    clientHeight: body.clientHeight,
+    loadedEndOffset: chapterLoadedEndOffset.value,
+    totalCharacters: page.totalCharacters
+  });
   void api().saveNovelReadingProgress({
     entryId: props.entry.id,
     chapterId: activeChapterId.value,
-    characterOffset: Math.round(page.totalCharacters * scrollFraction),
-    scrollFraction
+    characterOffset: position.characterOffset,
+    scrollFraction: position.scrollFraction
   }).catch(() => undefined);
 }
 

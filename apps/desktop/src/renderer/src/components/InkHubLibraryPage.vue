@@ -43,6 +43,8 @@ const documents = ref<InkHubNovelDocument[]>([]);
 const documentsTruncated = ref(false);
 const documentPreview = ref<InkHubNovelDocumentPreview | null>(null);
 const selectedDocument = ref<string | null>(null);
+const documentPreviewLoading = ref(false);
+const documentPreviewError = ref<string | null>(null);
 const selectedSkillId = ref<string | null>(null);
 const skillPreview = ref<InkHubSkillPreview | null>(null);
 const skillSource = ref("全部");
@@ -165,6 +167,8 @@ async function removeRoot(rootId: string): Promise<void> {
     selectedEntry.value = null;
     documents.value = [];
     documentPreview.value = null;
+    documentPreviewLoading.value = false;
+    documentPreviewError.value = null;
     uiMessage.success("已移除目录引用；磁盘中的小说文件没有变化");
   } catch (error: unknown) {
     uiMessage.error(error instanceof Error ? error.message : "移除引用失败");
@@ -176,6 +180,8 @@ async function selectNovel(entry: InkHubNovelEntry): Promise<void> {
   selectedEntry.value = entry;
   documents.value = [];
   documentPreview.value = null;
+  documentPreviewLoading.value = false;
+  documentPreviewError.value = null;
   selectedDocument.value = null;
   try {
     const result = await api().listNovelDocuments(entry.id);
@@ -190,13 +196,18 @@ async function selectNovel(entry: InkHubNovelEntry): Promise<void> {
 
 async function previewDocument(document: InkHubNovelDocument): Promise<void> {
   if (!selectedEntry.value) return;
+  const request = ++documentPreviewRequest;
+  selectedDocument.value = document.relativePath;
+  documentPreview.value = null;
+  documentPreviewError.value = null;
   if (!['md', 'txt'].includes(document.extension)) {
+    documentPreviewLoading.value = false;
+    documentPreviewError.value = "此格式不支持应用内预览，可在 Finder 中打开。";
     uiMessage.warning("PDF、EPUB 与 DOCX 当前只登记，不在应用内解析；可在 Finder 中打开");
     return;
   }
   const entryId = selectedEntry.value.id;
-  const request = ++documentPreviewRequest;
-  selectedDocument.value = document.relativePath;
+  documentPreviewLoading.value = true;
   try {
     const preview = await api().readNovelDocument(entryId, document.relativePath);
     if (
@@ -207,7 +218,10 @@ async function previewDocument(document: InkHubNovelDocument): Promise<void> {
     documentPreview.value = preview;
   } catch (error: unknown) {
     if (request !== documentPreviewRequest) return;
-    uiMessage.error(error instanceof Error ? error.message : "预览文档失败");
+    documentPreviewError.value = error instanceof Error ? error.message : "预览文档失败";
+    uiMessage.error(documentPreviewError.value);
+  } finally {
+    if (request === documentPreviewRequest) documentPreviewLoading.value = false;
   }
 }
 
@@ -508,9 +522,10 @@ onMounted(async () => {
         <span class="source-label">来源</span>
         <div v-for="root in novelSnapshot?.roots ?? []" :key="root.id" class="source-chip" :class="{ unavailable: !root.available }" :title="root.path">
           <i aria-hidden="true" />{{ root.label }}<span class="sr-only">（{{ root.available ? '可用' : '不可用' }}）</span>
-          <button v-if="(novelSnapshot?.roots.length ?? 0) > 1" type="button" :aria-label="`移除小说目录 ${root.label} 的引用`" @click="removeRoot(root.id)">×</button>
+          <button type="button" :aria-label="`移除小说目录 ${root.label} 的引用`" @click="removeRoot(root.id)">×</button>
         </div>
-        <small>只保存目录引用，不复制、不改名、不删除原文件</small>
+        <small v-if="(novelSnapshot?.roots.length ?? 0) > 0">只保存目录引用，不复制、不改名、不删除原文件</small>
+        <small v-else>尚未授权任何目录；添加后才会扫描其中的小说。</small>
       </div>
 
       <div class="novel-layout">
@@ -554,6 +569,8 @@ onMounted(async () => {
           </div>
           <small v-if="documentsTruncated" class="limit-note">文档较多，当前只展示安全上限内的索引。</small>
           <pre v-if="documentPreview" class="preview-content">{{ documentPreview.content }}</pre>
+          <div v-else-if="documentPreviewLoading" class="preview-placeholder" role="status">正在读取所选文档…</div>
+          <div v-else-if="documentPreviewError" class="preview-placeholder" role="alert">{{ documentPreviewError }}</div>
           <div v-else class="preview-placeholder">选择 Markdown 或 TXT 文档查看只读预览。</div>
           </template>
           <div v-else class="detail-empty-state"><AppIcon name="book" :size="28" /><strong>选择一部作品查看文档</strong><span>Markdown / TXT 可只读预览；其他格式可在 Finder 中打开。</span></div>

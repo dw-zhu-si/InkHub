@@ -1,6 +1,6 @@
 {
   "name": "@deepwrite/desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "墨枢（InkHub）本地 AI 小说创作与管理桌面端",
   "author": "zhusi",
   "license": "Apache-2.0",

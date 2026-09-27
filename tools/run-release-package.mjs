@@ -92,6 +92,7 @@ async function main() {
       verify: () => run("pnpm", ["verify"]),
       build: () => run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.release.yml",
         `--config.electronVersion=${electronPackage.version}`, `--config.directories.output=${output}`,
+        `--config.mac.identity=${signing.qualifier}`,
         "--mac", "dmg", "zip", `--${architecture}`, "--publish", "never"], { cwd: appDirectory }),
       notarize: () => notarizeDmg({ run, profile: environment.APPLE_KEYCHAIN_PROFILE,
         dmgPath: join(output, `${base}.dmg`), receiptPath }),

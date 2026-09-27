@@ -16,6 +16,9 @@ describe("InkHubNovelReader", () => {
     expect(source).toContain(":aria-current=");
     expect(source).toContain("? 'page' : undefined");
     expect(source).toContain("saveNovelReadingProgress");
+    expect(source).toContain("loadInkHubChapterThroughOffset");
+    expect(source).toContain("calculateInkHubReadingPosition");
+    expect(source).toContain("chapterLoadedEndOffset");
     expect(source).toContain("!chapters.value.some((chapter) => chapter.id === progress.chapterId)");
     expect(source).not.toContain("<pre");
   });
@@ -48,6 +51,7 @@ describe("InkHubNovelReader", () => {
     expect(source).toContain("确认批量写回");
     expect(source).toContain("resumeNovelAiRepairs");
     expect(source).toContain("cancelNovelAiRepairs");
+    expect(source).toContain("restorableInkHubRepairPlan");
     expect(source).toContain("每个完整批次都会立即保存在私有任务记录中");
     expect(source).toContain("修复后自动复检");
   });
@@ -61,5 +65,14 @@ describe("InkHubNovelReader", () => {
     expect(source).toContain("时间线、人物知识与称谓、地点与世界观、因果、POV、文风和伏笔");
     expect(source).toContain("用对应 Agent / Skill 一键修复");
     expect(source).toContain("定位证据章节");
+  });
+
+  it("使用完成后再调度的进度轮询，避免慢 IPC 请求重叠", () => {
+    expect(source).not.toContain("setInterval(");
+    expect(source).toContain("deepQualityProgressPollEpoch");
+    expect(source).toContain("aiProgressPollEpoch");
+    expect(source).toContain("storyProgressPollEpoch");
+    expect(source).toContain("setTimeout(() => void poll(), 900)");
+    expect(source).toContain("setTimeout(() => void poll(), 800)");
   });
 });

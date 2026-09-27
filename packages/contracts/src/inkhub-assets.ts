@@ -161,7 +161,8 @@ export const InkHubAssetsRequestSchema = z.discriminatedUnion("operation", [
     entryId: z.string().min(1),
     chapterId: z.string().min(1).max(128),
     expectedSourceRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-    content: z.string().min(1).max(2_000_000)
+    content: z.string().min(1).max(2_000_000),
+    confirmWrite: z.literal(true)
   }),
   z.object({
     operation: z.literal("createNovelContext"),

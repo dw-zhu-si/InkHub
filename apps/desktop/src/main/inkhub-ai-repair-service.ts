@@ -386,7 +386,7 @@ export class InkHubAiRepairService {
       const missingSkills = requiredSkillIds.filter((id) => {
         if (integratedSkillById.has(id)) return false;
         const skill = skillById.get(id);
-        return !skill || skill.installState !== "installed" || skill.status !== "verified" || !skill.executable;
+        return !skill || !skill.enabled || skill.installState !== "installed" || skill.status !== "verified" || skill.runtimeState !== "ready" || !skill.executable;
       });
       if (missingAgents.length) {
         throw new Error(`一键 AI 修复需要的专家 Agent 尚未安装或启用：${missingAgents.join("、")}。请先在“智能体团队”完成能力装配。`);

@@ -52,8 +52,9 @@ interface DiskModelSettings {
 }
 
 interface DiskModelSecrets {
-  version: 1;
+  version: 2;
   encryptedApiKeys: Record<string, string>;
+  credentialTargets: Record<string, string>;
 }
 
 const EMPTY_SETTINGS: DiskModelSettings = {
@@ -64,9 +65,28 @@ const EMPTY_SETTINGS: DiskModelSettings = {
 };
 
 const EMPTY_SECRETS: DiskModelSecrets = {
-  version: 1,
-  encryptedApiKeys: {}
+  version: 2,
+  encryptedApiKeys: {},
+  credentialTargets: {}
 };
+
+const OFFICIAL_CREDENTIAL_TARGET = "managed:deepwrite-official";
+
+function credentialTarget(model: Pick<ModelConfigInput, "provider" | "api" | "baseUrl">): string {
+  const url = new URL(model.baseUrl);
+  const normalizedPath = url.pathname.replace(/\/+$/u, "") || "/";
+  return JSON.stringify([
+    model.provider.trim().toLowerCase(),
+    model.api,
+    `${url.protocol}//${url.host}${normalizedPath}${url.search}`
+  ]);
+}
+
+function secretTargetForModel(model: Pick<ModelConfigInput, "provider" | "api" | "baseUrl" | "managedBy">): string {
+  return model.managedBy === "deepwrite-official"
+    ? OFFICIAL_CREDENTIAL_TARGET
+    : credentialTarget(model);
+}
 
 interface FreeModelCatalogReader {
   initialize(): Promise<void>;
@@ -137,7 +157,7 @@ function normalizeDiskSettings(raw: unknown): DiskModelSettings {
   };
 }
 
-function normalizeDiskSecrets(raw: unknown): DiskModelSecrets {
+function normalizeDiskSecrets(raw: unknown, settings: DiskModelSettings): DiskModelSecrets {
   if (!isRecord(raw) || !isRecord(raw.encryptedApiKeys)) {
     return structuredClone(EMPTY_SECRETS);
   }
@@ -147,7 +167,23 @@ function normalizeDiskSecrets(raw: unknown): DiskModelSecrets {
       encryptedApiKeys[id] = value;
     }
   }
-  return { version: 1, encryptedApiKeys };
+  const credentialTargets: Record<string, string> = {};
+  if (isRecord(raw.credentialTargets)) {
+    for (const [id, value] of Object.entries(raw.credentialTargets)) {
+      if (typeof value === "string" && value.length > 0) credentialTargets[id] = value;
+    }
+  }
+  // Version 1 stored only ciphertext by model id. Bind a legacy credential to
+  // the endpoint that was persisted alongside it before it can be reused.
+  for (const model of settings.models) {
+    if (encryptedApiKeys[model.id] && !credentialTargets[model.id]) {
+      credentialTargets[model.id] = secretTargetForModel(model);
+    }
+  }
+  if (encryptedApiKeys[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID]) {
+    credentialTargets[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] = OFFICIAL_CREDENTIAL_TARGET;
+  }
+  return { version: 2, encryptedApiKeys, credentialTargets };
 }
 
 async function readJson(path: string): Promise<unknown> {
@@ -266,6 +302,9 @@ export class ModelConfigStore {
     if (!encrypted) {
       return this.officialModelCatalog.queryBalance();
     }
+    if (secrets.credentialTargets[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] !== OFFICIAL_CREDENTIAL_TARGET) {
+      throw new Error("官方令牌的凭证绑定无效，请重新填写并保存。");
+    }
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error("系统安全存储当前不可用，无法查询当前 Key 的剩余用量。");
     }
@@ -296,12 +335,16 @@ export class ModelConfigStore {
       }
       const [settings, existingSecrets] = await this.readState();
       const nextSecrets: DiskModelSecrets = {
-        version: 1,
+        version: 2,
         encryptedApiKeys: {
           ...existingSecrets.encryptedApiKeys,
           [DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID]: safeStorage
             .encryptString(apiKey)
             .toString("base64")
+        },
+        credentialTargets: {
+          ...existingSecrets.credentialTargets,
+          [DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID]: OFFICIAL_CREDENTIAL_TARGET
         }
       };
       const nextSettings = this.synchronizeSettings(
@@ -333,8 +376,10 @@ export class ModelConfigStore {
     const operation = this.writeChain.then(async () => {
       const [settings, existingSecrets] = await this.readState();
       const encryptedApiKeys = { ...existingSecrets.encryptedApiKeys };
+      const credentialTargets = { ...existingSecrets.credentialTargets };
       delete encryptedApiKeys[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID];
-      const nextSecrets: DiskModelSecrets = { version: 1, encryptedApiKeys };
+      delete credentialTargets[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID];
+      const nextSecrets: DiskModelSecrets = { version: 2, encryptedApiKeys, credentialTargets };
       const nextSettings = this.synchronizeSettings(
         settings,
         nextSecrets,
@@ -397,19 +442,26 @@ export class ModelConfigStore {
     const operation = this.writeChain.then(async () => {
       const [existingSettings, existingSecrets] = await this.readState();
       const encryptedApiKeys: Record<string, string> = {};
+      const credentialTargets: Record<string, string> = {};
 
       const officialToken =
         existingSecrets.encryptedApiKeys[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID];
-      if (officialToken) {
+      if (
+        officialToken &&
+        existingSecrets.credentialTargets[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] === OFFICIAL_CREDENTIAL_TARGET
+      ) {
         encryptedApiKeys[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] = officialToken;
+        credentialTargets[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] = OFFICIAL_CREDENTIAL_TARGET;
       }
 
       // Managed free-model credentials are refreshed independently from the
       // editable model list and must survive a normal settings save.
       for (const model of freeCatalog.models) {
         const encrypted = existingSecrets.encryptedApiKeys[model.id];
-        if (encrypted) {
+        const target = secretTargetForModel(model);
+        if (encrypted && existingSecrets.credentialTargets[model.id] === target) {
           encryptedApiKeys[model.id] = encrypted;
+          credentialTargets[model.id] = target;
         }
       }
 
@@ -425,18 +477,27 @@ export class ModelConfigStore {
             );
           }
           encryptedApiKeys[model.id] = safeStorage.encryptString(apiKey).toString("base64");
+          credentialTargets[model.id] = secretTargetForModel(model);
           continue;
         }
         if (model.clearApiKey) {
           continue;
         }
         const previous = existingSecrets.encryptedApiKeys[model.id];
-        if (previous) {
+        const previousModel = existingSettings.models.find((candidate) => candidate.id === model.id);
+        const target = secretTargetForModel(model);
+        if (
+          previous &&
+          previousModel &&
+          secretTargetForModel(previousModel) === target &&
+          existingSecrets.credentialTargets[model.id] === target
+        ) {
           encryptedApiKeys[model.id] = previous;
+          credentialTargets[model.id] = target;
         }
       }
 
-      const nextSecrets: DiskModelSecrets = { version: 1, encryptedApiKeys };
+      const nextSecrets: DiskModelSecrets = { version: 2, encryptedApiKeys, credentialTargets };
       const editableModels = input.models
         .filter((model) => model.managedBy !== "deepwrite-official")
         .map((model) =>
@@ -514,6 +575,9 @@ export class ModelConfigStore {
     const encrypted = secrets.encryptedApiKeys[secretId];
     let apiKey = "";
     if (!apiKey && encrypted) {
+      if (secrets.credentialTargets[secretId] !== secretTargetForModel(model)) {
+        throw new Error("模型凭证与当前服务地址不匹配，请重新填写 API Key 并保存。");
+      }
       if (!safeStorage.isEncryptionAvailable()) {
         throw new Error("系统安全存储当前不可用，无法解密这个模型的 API Key。");
       }
@@ -548,6 +612,9 @@ export class ModelConfigStore {
           : model.id;
       const encrypted = secrets.encryptedApiKeys[secretId];
       if (encrypted) {
+        if (secrets.credentialTargets[secretId] !== secretTargetForModel(model)) {
+          throw new Error("模型服务地址或厂家已改变，请重新填写 API Key 后再测试连接。");
+        }
         if (!safeStorage.isEncryptionAvailable()) {
           throw new Error("系统安全存储当前不可用，无法解密这个模型的 API Key。");
         }
@@ -568,9 +635,13 @@ export class ModelConfigStore {
 
   async resolveDraftApiKey(input: {
     id?: string;
+    provider: string;
+    api: ModelConfig["api"];
+    baseUrl: string;
     apiKey?: string;
     clearApiKey?: boolean;
   }): Promise<string> {
+    assertSupportedModelEndpoint(input.provider, input.baseUrl);
     const provided = input.apiKey?.trim() ?? "";
     if (provided) {
       return provided;
@@ -587,6 +658,10 @@ export class ModelConfigStore {
     const encrypted = secrets.encryptedApiKeys[modelId];
     if (!encrypted) {
       return "";
+    }
+    const target = credentialTarget(input);
+    if (secrets.credentialTargets[modelId] !== target) {
+      throw new Error("模型服务地址或厂家已改变，请重新填写 API Key 后再读取远程模型。");
     }
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error("系统安全存储当前不可用，无法解密这个模型的 API Key。");
@@ -611,11 +686,12 @@ export class ModelConfigStore {
   }
 
   private async readState(): Promise<[DiskModelSettings, DiskModelSecrets]> {
-    const [settings, secrets] = await Promise.all([
+    const [rawSettings, rawSecrets] = await Promise.all([
       readJson(this.settingsPath),
       readJson(this.secretsPath)
     ]);
-    return [normalizeDiskSettings(settings), normalizeDiskSecrets(secrets)];
+    const settings = normalizeDiskSettings(rawSettings);
+    return [settings, normalizeDiskSecrets(rawSecrets, settings)];
   }
 
   /**
@@ -637,12 +713,18 @@ export class ModelConfigStore {
       }
       const [, existingSecrets] = await this.readState();
       const encryptedApiKeys = { ...existingSecrets.encryptedApiKeys };
+      const credentialTargets = { ...existingSecrets.credentialTargets };
+      const modelById = new Map(catalog.models.map((model) => [model.id, model]));
       for (const [id, apiKey] of entries) {
+        const model = modelById.get(id);
+        if (!model) continue;
         encryptedApiKeys[id] = safeStorage.encryptString(apiKey).toString("base64");
+        credentialTargets[id] = secretTargetForModel(model);
       }
       await atomicWriteJson(this.secretsPath, {
-        version: 1,
-        encryptedApiKeys
+        version: 2,
+        encryptedApiKeys,
+        credentialTargets
       } satisfies DiskModelSecrets);
     });
     this.writeChain = operation.then(
@@ -662,17 +744,18 @@ export class ModelConfigStore {
       defaultModelId: settings.defaultModelId,
       models: settings.models.map((model) => ({
         ...model,
-        hasApiKey: Boolean(
-          secrets.encryptedApiKeys[
-            model.managedBy === "deepwrite-official"
-              ? DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID
-              : model.id
-          ]
-        )
+        hasApiKey: (() => {
+          const secretId = model.managedBy === "deepwrite-official"
+            ? DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID
+            : model.id;
+          return Boolean(secrets.encryptedApiKeys[secretId]) &&
+            secrets.credentialTargets[secretId] === secretTargetForModel(model);
+        })()
       })),
       deepwriteFreeModels: freeCatalog.models.map((model) => ({
         ...model,
-        hasApiKey: Boolean(secrets.encryptedApiKeys[model.id])
+        hasApiKey: Boolean(secrets.encryptedApiKeys[model.id]) &&
+          secrets.credentialTargets[model.id] === secretTargetForModel(model)
       })),
       ...(freeCatalog.defaultModelId
         ? { deepwriteFreeDefaultModelId: freeCatalog.defaultModelId }
@@ -682,7 +765,7 @@ export class ModelConfigStore {
         ...model,
         hasApiKey: Boolean(
           secrets.encryptedApiKeys[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID]
-        )
+        ) && secrets.credentialTargets[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] === OFFICIAL_CREDENTIAL_TARGET
       })),
       deepwriteOfficialEnabledModelIds: officialCatalog.models
         .filter(
@@ -693,7 +776,7 @@ export class ModelConfigStore {
         .map((model) => model.id),
       deepwriteOfficialTokenConfigured: Boolean(
         secrets.encryptedApiKeys[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID]
-      )
+      ) && secrets.credentialTargets[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] === OFFICIAL_CREDENTIAL_TARGET
     });
   }
 
@@ -707,7 +790,8 @@ export class ModelConfigStore {
       officialCatalog.models.map((model) => model.id)
     );
     const disabledOfficialModelIds = new Set(settings.disabledOfficialModelIds);
-    const officialModels = secrets.encryptedApiKeys[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID]
+    const officialModels = secrets.encryptedApiKeys[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] &&
+      secrets.credentialTargets[DEEPWRITE_OFFICIAL_TOKEN_SECRET_ID] === OFFICIAL_CREDENTIAL_TARGET
       ? officialCatalog.models
           .filter(
             (model) =>

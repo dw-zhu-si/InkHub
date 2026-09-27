@@ -1,4 +1,7 @@
-import type { InkHubNovelAiRepairPlan } from "@deepwrite/contracts";
+import type {
+  InkHubNovelAiRepairPlan,
+  InkHubNovelAiRepairTask
+} from "@deepwrite/contracts";
 
 export type InkHubRepairReviewDecision = "pending" | "accepted" | "kept";
 
@@ -23,6 +26,15 @@ export function createInkHubRepairReviewDrafts(
     // bulk writeback of chapters the author has not reviewed.
     decision: isWritableNovelRepairPath(proposal.relativePath) ? "pending" : "kept"
   }));
+}
+
+export function restorableInkHubRepairPlan(
+  task: InkHubNovelAiRepairTask | null
+): InkHubNovelAiRepairPlan | null {
+  if (!task || task.status === "consumed" || task.plan.proposals.length === 0) {
+    return null;
+  }
+  return task.plan;
 }
 
 export function acceptedInkHubRepairDrafts(

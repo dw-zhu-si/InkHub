@@ -164,6 +164,7 @@ async function handle(request: QualityWorkerRequest): Promise<unknown> {
 parentPort.on("message", (request: QualityWorkerRequest) => {
   operationChain = operationChain.then(async () => {
     try {
+      parentPort!.postMessage({ id: request.id, started: true });
       const result = await handle(request);
       parentPort!.postMessage({ id: request.id, ok: true, result });
     } catch (error: unknown) {

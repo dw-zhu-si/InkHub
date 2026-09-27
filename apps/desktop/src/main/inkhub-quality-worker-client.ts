@@ -22,12 +22,19 @@ import {
   type InkHubNovelSearchResponse
 } from "@deepwrite/contracts";
 
-interface WorkerResponse {
+interface WorkerStartedResponse {
+  id: number;
+  started: true;
+}
+
+interface WorkerCompletedResponse {
   id: number;
   ok: boolean;
   result?: unknown;
   error?: string;
 }
+
+type WorkerResponse = WorkerStartedResponse | WorkerCompletedResponse;
 
 type WorkerRequest = {
   operation: "summary";
@@ -82,10 +89,13 @@ type WorkerRequest = {
 
 interface PendingRequest {
   label: string;
+  timeoutMs: number;
   resolve(value: unknown): void;
   reject(error: Error): void;
-  timeout: ReturnType<typeof setTimeout>;
+  timeout: ReturnType<typeof setTimeout> | null;
 }
+
+const MAX_PENDING_REQUESTS = 64;
 
 export class InkHubQualityWorkerClient {
   private worker: Worker | null = null;
@@ -99,7 +109,7 @@ export class InkHubQualityWorkerClient {
 
   private rejectPending(error: Error): void {
     for (const pending of this.pending.values()) {
-      clearTimeout(pending.timeout);
+      if (pending.timeout) clearTimeout(pending.timeout);
       pending.reject(error);
     }
     this.pending.clear();
@@ -125,8 +135,19 @@ export class InkHubQualityWorkerClient {
     worker.on("message", (raw: WorkerResponse) => {
       const pending = this.pending.get(raw.id);
       if (!pending) return;
+      if ("started" in raw) {
+        if (!pending.timeout) {
+          pending.timeout = setTimeout(() => {
+            if (!this.pending.has(raw.id)) return;
+            this.stopWorker(new Error(
+              `${pending.label}超过安全时限，已停止并重置后台任务。`
+            ));
+          }, pending.timeoutMs);
+        }
+        return;
+      }
       this.pending.delete(raw.id);
-      clearTimeout(pending.timeout);
+      if (pending.timeout) clearTimeout(pending.timeout);
       if (!raw.ok) {
         pending.reject(new Error(raw.error || `${pending.label}后台任务失败。`));
         return;
@@ -152,15 +173,24 @@ export class InkHubQualityWorkerClient {
     timeoutMs: number,
     label: string
   ): Promise<unknown> {
+    if (this.pending.size >= MAX_PENDING_REQUESTS) {
+      return Promise.reject(new Error(
+        `小说索引后台服务繁忙，待处理请求已达 ${MAX_PENDING_REQUESTS} 项，请稍后重试。`
+      ));
+    }
     return new Promise((resolve, reject) => {
       const worker = this.ensureWorker();
       const id = this.nextRequestId++;
-      const timeout = setTimeout(() => {
-        if (!this.pending.has(id)) return;
-        this.stopWorker(new Error(`${label}超过安全时限，已停止并重置后台任务。`));
-      }, timeoutMs);
-      this.pending.set(id, { label, resolve, reject, timeout });
-      worker.postMessage({ id, ...request, indexDirectory: this.indexDirectory });
+      this.pending.set(id, { label, timeoutMs, resolve, reject, timeout: null });
+      try {
+        worker.postMessage({ id, ...request, indexDirectory: this.indexDirectory });
+      } catch (error: unknown) {
+        this.pending.delete(id);
+        reject(new Error(
+          `${label}无法提交到小说索引后台服务。`,
+          { cause: error }
+        ));
+      }
     });
   }
 

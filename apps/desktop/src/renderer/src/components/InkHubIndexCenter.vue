@@ -24,7 +24,7 @@ type IndexRow = {
   error: string | null;
 };
 
-type ModelHubHealth = "checking" | "online" | "offline" | "unconfigured";
+type ModelHubHealth = "idle" | "checking" | "online" | "offline" | "unconfigured";
 
 const rows = ref<Record<string, IndexRow>>({});
 const statusLoading = ref(false);
@@ -33,9 +33,9 @@ const batchStopRequested = ref(false);
 const batchCurrentTitle = ref("");
 const batchCompleted = ref(0);
 const batchTotal = ref(0);
-const modelHubHealth = ref<ModelHubHealth>("checking");
+const modelHubHealth = ref<ModelHubHealth>("idle");
 const modelHubChecking = ref(false);
-const modelHubDetail = ref("正在读取本机模型目录…");
+const modelHubDetail = ref("尚未检查；点击后才会访问已配置的模型服务");
 let statusEpoch = 0;
 
 function inkHubApi() {
@@ -111,6 +111,7 @@ const progressPercent = computed(() => batchTotal.value
   : 0);
 
 const modelHubLabel = computed(() => ({
+  idle: "未检查",
   checking: "检查中",
   online: "在线",
   offline: "离线",
@@ -269,7 +270,7 @@ watch(
 );
 
 onMounted(() => {
-  void Promise.all([loadIndexStatuses(), checkModelHub()]);
+  void loadIndexStatuses();
 });
 </script>
 
@@ -280,10 +281,10 @@ onMounted(() => {
       <div>
         <strong>模型服务运行状态 · {{ modelHubLabel }}</strong>
         <small>{{ modelHubDetail }}</small>
-        <small>本次只读取模型目录，不会发起生成或计费请求</small>
+        <small>点击检查会连接已配置的服务并携带所需凭证；只读取模型目录，不会发起生成请求</small>
       </div>
       <button type="button" :disabled="modelHubChecking" @click="checkModelHub">
-        {{ modelHubChecking ? '检查中…' : '重新检查' }}
+        {{ modelHubChecking ? '检查中…' : '检查连接' }}
       </button>
     </div>
 

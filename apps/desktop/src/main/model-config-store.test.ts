@@ -144,16 +144,56 @@ describe("ModelConfigStore draft API keys", () => {
     });
 
     await expect(
-      store.resolveDraftApiKey({ id: "modelhub-writer" })
+      store.resolveDraftApiKey({
+        id: "modelhub-writer",
+        provider: "modelhub",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:11435/v1"
+      })
     ).resolves.toBe("project-token-saved-test-only");
     await expect(
       store.resolveDraftApiKey({
         id: "modelhub-writer",
+        provider: "modelhub",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:11435/v1",
         apiKey: "project-token-typed-test-only"
       })
     ).resolves.toBe("project-token-typed-test-only");
     await expect(
-      store.resolveDraftApiKey({ id: "modelhub-writer", clearApiKey: true })
+      store.resolveDraftApiKey({
+        id: "modelhub-writer",
+        provider: "modelhub",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:11435/v1",
+        clearApiKey: true
+      })
     ).resolves.toBe("");
+  });
+
+  it("never reuses a saved key after the provider or endpoint changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "inkhub-model-bound-key-"));
+    temporaryRoots.push(root);
+    const store = createStore(root);
+    await store.save({
+      models: [{ ...modelHubModel(), apiKey: "endpoint-bound-token-test-only" }],
+      defaultModelId: "modelhub-writer"
+    });
+    const changed = modelHubModel({
+      provider: "另一家模型服务",
+      baseUrl: "https://models.example.test/v1"
+    });
+
+    await expect(store.resolveDraft(changed)).rejects.toThrow(/重新填写 API Key/u);
+    await expect(store.resolveDraftApiKey({
+      id: changed.id,
+      provider: changed.provider,
+      api: changed.api,
+      baseUrl: changed.baseUrl
+    })).rejects.toThrow(/重新填写 API Key/u);
+
+    const saved = await store.save({ models: [changed], defaultModelId: changed.id });
+    expect(saved.models[0]?.hasApiKey).toBe(false);
+    await expect(store.resolveDraft(changed)).resolves.toMatchObject({ apiKey: "" });
   });
 });

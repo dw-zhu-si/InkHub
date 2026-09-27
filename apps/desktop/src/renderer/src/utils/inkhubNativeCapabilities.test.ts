@@ -1,4 +1,8 @@
-import { CatalogSnapshotSchema } from "@deepwrite/contracts";
+import {
+  CatalogSnapshotSchema,
+  DEFAULT_AGENT_TEAM_SETTINGS,
+  DEFAULT_LONG_AGENT_TEAM_SETTINGS
+} from "@deepwrite/contracts";
 import { describe, expect, it } from "vitest";
 import {
   INKHUB_NATIVE_AGENTS,
@@ -10,7 +14,9 @@ import {
   bundledInkHubStoryKernelAttachments,
   bundledInkHubStylePresetAttachments,
   inkHubStoryKernelAttachments,
-  inkHubStylePresetAttachments
+  inkHubStylePresetAttachments,
+  mergeLongAgents,
+  mergeWorkspaceAgents
 } from "./inkhubNativeCapabilities";
 import { INKHUB_COVER_SKILLS, renderInkHubCoverSkill } from "./inkhubCoverSkills";
 import { INKHUB_STORY_KERNEL_SKILLS, renderInkHubStoryKernelSkill } from "./inkhubStoryKernelSkills";
@@ -52,6 +58,66 @@ describe("InkHub native capabilities", () => {
     expect(installerSource).toContain("entryId: existing.id");
     expect(installerSource).toContain("agent.systemPrompt === expected.systemPrompt");
     expect(installerSource).toContain("agent.modelMode === expected.modelMode");
+  });
+
+  it("preserves user overrides on an existing native workspace agent", () => {
+    const userAgent = {
+      ...INKHUB_NATIVE_AGENTS.find((agent) => agent.id === "inkhub_narratologist")!,
+      systemPrompt: "用户自定义的叙事审阅提示词。",
+      enabled: false,
+      modelMode: "custom" as const,
+      modelId: "user-selected-model",
+      thinkingLevel: "medium" as const
+    };
+    const settings = structuredClone(DEFAULT_AGENT_TEAM_SETTINGS);
+    settings.teams.find((team) => team.parentAgentId === "plot_design")!
+      .subagents.push(userAgent);
+
+    const merged = mergeWorkspaceAgents(settings);
+
+    expect(
+      merged.value.teams
+        .find((team) => team.parentAgentId === "plot_design")!
+        .subagents.find((agent) => agent.id === userAgent.id)
+    ).toEqual(userAgent);
+  });
+
+  it("does not restore a removed workspace native agent after the team was seeded", () => {
+    const initial = mergeWorkspaceAgents(structuredClone(DEFAULT_AGENT_TEAM_SETTINGS));
+    const plotTeam = initial.value.teams.find(
+      (team) => team.parentAgentId === "plot_design"
+    )!;
+    plotTeam.subagents = plotTeam.subagents.filter(
+      (agent) => agent.id !== "inkhub_narratologist"
+    );
+
+    const mergedAgain = mergeWorkspaceAgents(initial.value);
+
+    expect(
+      mergedAgain.value.teams
+        .find((team) => team.parentAgentId === "plot_design")!
+        .subagents.some((agent) => agent.id === "inkhub_narratologist")
+    ).toBe(false);
+    expect(mergedAgain.added).toBe(0);
+  });
+
+  it("preserves user overrides on existing long-workspace native agents", () => {
+    const userAgent = {
+      ...INKHUB_NATIVE_AGENTS.find((agent) => agent.id === "inkhub_psychologist")!,
+      systemPrompt: "仅核对人物动机，不自动改写。",
+      enabled: false
+    };
+    const settings = structuredClone(DEFAULT_LONG_AGENT_TEAM_SETTINGS);
+    settings.teams.find((team) => team.parentAgentId === "setting")!
+      .subagents.push(userAgent);
+
+    const merged = mergeLongAgents(settings);
+
+    expect(
+      merged.value.teams
+        .find((team) => team.parentAgentId === "setting")!
+        .subagents.find((agent) => agent.id === userAgent.id)
+    ).toEqual(userAgent);
   });
 
   it("makes all verified clean-room style presets available to load_skill", () => {

@@ -48,6 +48,8 @@ describe("LeftSidebar account controls", () => {
     expect(source).toContain('emit("createBook")');
     expect(source).not.toContain('label: "新建对话"');
     expect(source).not.toContain("newConversation");
+    expect(source).toContain('navigator.platform');
+    expect(source).toContain('"⌘ N" : "Ctrl N"');
   });
 
   it("keeps agent-team management in the primary navigation", () => {

@@ -109,6 +109,7 @@ describe("UtilitySupervisor internal command bridge", () => {
 
   afterEach(async () => {
     await Promise.all(supervisors.splice(0).map((supervisor) => supervisor.shutdownAll()));
+    vi.unstubAllEnvs();
   });
 
   function createSupervisor(
@@ -143,6 +144,72 @@ describe("UtilitySupervisor internal command bridge", () => {
       command
     });
   }
+
+  it("passes only required runtime variables to every utility process", () => {
+    const requiredEnvironment = {
+      PATH: "/test/bin",
+      HOME: "/test/home",
+      TMPDIR: "/test/tmp",
+      LANG: "zh_CN.UTF-8",
+      LC_ALL: "zh_CN.UTF-8",
+      NODE_ENV: "test",
+      DEEPWRITE_USER_DATA_PATH: "/test/user-data",
+      DEEPWRITE_APP_MODE: "evaluation",
+      DEEPWRITE_LEGACY_DATA_ROOT: "/test/legacy",
+      DEEPWRITE_LEGACY_DATA_ROOTS: '["/test/legacy"]',
+      DEEPWRITE_SMOKE: "1",
+      INKHUB_ACCEPTANCE: "1"
+    } as const;
+    const sensitiveEnvironment = {
+      OPENAI_API_KEY: "openai-secret",
+      ANTHROPIC_API_KEY: "anthropic-secret",
+      MODELHUB_API_KEY: "modelhub-secret",
+      AWS_SECRET_ACCESS_KEY: "aws-secret",
+      GOOGLE_APPLICATION_CREDENTIALS: "/test/gcp-credentials.json",
+      AZURE_CLIENT_SECRET: "azure-secret",
+      GITHUB_TOKEN: "github-secret",
+      NPM_TOKEN: "npm-secret",
+      SSH_AUTH_SOCK: "/test/ssh-agent.sock",
+      INKHUB_APPLE_SIGNING_IDENTITY: "Developer ID Application: Secret",
+      INKHUB_APPLE_TEAM_ID: "SECRETTEAM",
+      APPLE_ID: "release@example.invalid",
+      APPLE_APP_SPECIFIC_PASSWORD: "notary-secret",
+      AC_KEY_ID: "notary-key-id",
+      AC_ISSUER_ID: "notary-issuer-id",
+      CSC_LINK: "/test/signing-certificate.p12",
+      CSC_KEY_PASSWORD: "certificate-secret",
+      NODE_OPTIONS: "--require=/test/injected.cjs",
+      DYLD_INSERT_LIBRARIES: "/test/injected.dylib",
+      UNRELATED_RUNTIME_VALUE: "must-not-cross-boundary"
+    } as const;
+    for (const [key, value] of Object.entries({
+      ...requiredEnvironment,
+      ...sensitiveEnvironment
+    })) {
+      vi.stubEnv(key, value);
+    }
+
+    createSupervisor();
+
+    expect(electronMocks.fork).toHaveBeenCalledTimes(3);
+    const serviceNames = new Set<string>();
+    for (const call of electronMocks.fork.mock.calls) {
+      const options = call[2] as {
+        serviceName: string;
+        env: Record<string, string>;
+      };
+      serviceNames.add(options.serviceName);
+      expect(options.env).toMatchObject(requiredEnvironment);
+      for (const key of Object.keys(sensitiveEnvironment)) {
+        expect(options.env).not.toHaveProperty(key);
+      }
+    }
+    expect([...serviceNames].sort()).toEqual([
+      "deepwrite-agent",
+      "deepwrite-core",
+      "deepwrite-tool"
+    ]);
+  });
 
   it("routes an allowlisted Agent request through Core and correlates its result", async () => {
     createSupervisor({ core: ["system.health"] });

@@ -27,13 +27,43 @@ async function createFixture(): Promise<{
   await mkdir(join(project, "chapters"), { recursive: true });
   await writeFile(join(project, "chapters", "第一章.md"), "第一章\n雨落在旧城。", "utf8");
   await writeFile(join(project, "设定.txt"), "只作为小说资料读取。", "utf8");
+  const store = new InkHubAssetStore(join(root, "user-data"), root);
+  await store.addNovelRoot(join(root, "Desktop", "小说"));
   return {
     root,
-    store: new InkHubAssetStore(join(root, "user-data"), root)
+    store
   };
 }
 
 describe("InkHubAssetStore", () => {
+  it("does not scan a conventional novel folder until the user registers it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "inkhub-unregistered-root-"));
+    temporaryRoots.push(root);
+    const conventionalRoot = join(root, "Desktop", "小说");
+    await mkdir(join(conventionalRoot, "长篇", "未授权小说"), { recursive: true });
+    await writeFile(join(conventionalRoot, "长篇", "未授权小说", "第一章.md"), "不应被自动扫描", "utf8");
+    const store = new InkHubAssetStore(join(root, "user-data"), root);
+
+    await expect(store.listNovels()).resolves.toMatchObject({ roots: [], entries: [] });
+
+    await store.addNovelRoot(conventionalRoot);
+    await expect(store.listNovels()).resolves.toMatchObject({
+      roots: [expect.objectContaining({ label: "小说", available: true })],
+      entries: [expect.objectContaining({ title: "未授权小说" })]
+    });
+  });
+
+  it("keeps the library empty after the last registered root is removed", async () => {
+    const { store } = await createFixture();
+    const before = await store.listNovels();
+    expect(before.roots).toHaveLength(1);
+
+    const after = await store.removeNovelRoot(before.roots[0]!.id);
+    expect(after.roots).toEqual([]);
+    expect(after.entries).toEqual([]);
+    await expect(store.listNovels()).resolves.toMatchObject({ roots: [], entries: [] });
+  });
+
   it("keeps the production SQLite index out of Electron's main thread", async () => {
     const root = await mkdtemp(join(tmpdir(), "inkhub-worker-boundary-"));
     temporaryRoots.push(root);

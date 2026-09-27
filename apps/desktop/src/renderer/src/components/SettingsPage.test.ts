@@ -54,6 +54,14 @@ describe("SettingsPage", () => {
     expect(source).not.toContain("saveAgentTeams");
   });
 
+  it("does not expose navigation items that only lead to placeholder pages", () => {
+    expect(source).not.toContain('{ id: "profile"');
+    expect(source).not.toContain('{ id: "voice"');
+    expect(source).not.toContain('{ id: "configuration"');
+    expect(source).not.toContain('{ id: "personalization"');
+    expect(source).not.toContain('{ id: "keyboard"');
+  });
+
   it("provides dedicated skill and material library agent categories", () => {
     expect(source).toContain('label: "技能库配置"');
     expect(source).toContain('label: "素材库配置"');

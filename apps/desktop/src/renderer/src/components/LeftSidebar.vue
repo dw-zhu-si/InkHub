@@ -205,11 +205,13 @@ onBeforeUnmount(() => {
   unsubscribeUpdates?.();
 });
 
+const primaryModifierLabel = /Mac|iPhone|iPad/u.test(navigator.platform) ? "⌘ N" : "Ctrl N";
+
 const newBookItem = {
   id: "create-book",
   label: "新建书籍",
   icon: "plus",
-  shortcut: "Ctrl N"
+  shortcut: primaryModifierLabel
 } as const;
 
 type PrimaryFeatureId = DialogMode | "agent-teams" | "conversation";

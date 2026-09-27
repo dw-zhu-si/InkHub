@@ -150,12 +150,7 @@ const sections: SettingsSection[] = [
     label: "个人",
     categories: [
       { id: "general", label: "常规", icon: "settings" },
-      { id: "profile", label: "个人资料", icon: "user" },
-      { id: "appearance", label: "外观", icon: "sparkles" },
-      { id: "voice", label: "语音", icon: "brain" },
-      { id: "configuration", label: "配置", icon: "model" },
-      { id: "personalization", label: "个性化", icon: "sparkles" },
-      { id: "keyboard", label: "键盘快捷键", icon: "keyboard" }
+      { id: "appearance", label: "外观", icon: "sparkles" }
     ]
   }
 ];

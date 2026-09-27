@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseReleaseTarget, runReleaseStages } from "../../../tools/run-release-package.mjs";
 import { notarizeDmg, preflightNotarization, releaseEnvironment, releaseIdentityTemplate, runReleaseCommand, sha256File, validateReleaseSigningConfig } from "../../../tools/release-notarization.mjs";
 import { selectAppleSigningIdentity } from "../../../tools/apple-signing-identities.mjs";
-import { masBuildEnvironment, validateMasPreflight, validateMasProfilePayload } from "./run-mas-package.mjs";
+import { masBuildEnvironment, masBuildVersion, validateMasPreflight, validateMasProfilePayload } from "./run-mas-package.mjs";
 
 const temporary: string[] = [];
 const submissionId = "00000000-0000-4000-8000-000000000001";
@@ -58,6 +58,12 @@ describe("release preflight and safe stage order", () => {
       HOME: "/example/home",
       LANG: "zh_CN.UTF-8"
     });
+  });
+
+  it("requires one positive MAS build version from the release config", () => {
+    expect(masBuildVersion('buildVersion: "2"\nmas:\n  type: distribution\n')).toBe("2");
+    expect(() => masBuildVersion("mas:\n  type: distribution\n")).toThrow("buildVersion");
+    expect(() => masBuildVersion('buildVersion: "0"\n')).toThrow("buildVersion");
   });
 
   it("accepts an Apple macOS App Store distribution profile without requiring app entitlements in the profile", () => {

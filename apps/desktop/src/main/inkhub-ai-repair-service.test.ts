@@ -58,7 +58,11 @@ const agents: ShortAgentSubagentDefinition[] = [
   { id: "inkhub_reader_advocate", name: "读者体验测试员", description: "读者", systemPrompt: "从读者视角验证修订。", enabled: true, modelMode: "inherit" }
 ];
 
-function fixture(runner: InkHubRepairModelRunner, installedSkills = ["consistency-check", "novel-text-polish"]) {
+function fixture(
+  runner: InkHubRepairModelRunner,
+  installedSkills = ["consistency-check", "novel-text-polish"],
+  disabledSkills: readonly string[] = []
+) {
   const assets = {
     runNovelQualityCheck: vi.fn(async () => report),
     listNovelChapters: vi.fn(async () => ({ summary: report.coverage, chapters, offset: 0, total: 2, nextOffset: null })),
@@ -75,9 +79,10 @@ function fixture(runner: InkHubRepairModelRunner, installedSkills = ["consistenc
       verifiedAt: "2026-08-17T08:00:00.000Z",
       skills: installedSkills.map((id) => ({
         id, title: id, source: "trae" as const, path: `/skills/${id}/SKILL.md`, expectedSha256: revision,
-        actualSha256: revision, status: "verified" as const, license: "未声明", enabled: true,
+        actualSha256: revision, status: "verified" as const, license: "未声明", enabled: !disabledSkills.includes(id),
         executable: true, capabilityKind: "prompt-skill" as const, skillKind: "plot" as const,
-        installState: "installed" as const, runtimeState: "ready" as const
+        installState: "installed" as const,
+        runtimeState: disabledSkills.includes(id) ? "disabled" as const : "ready" as const
       }))
     })),
     readSkill: vi.fn(async (id: string) => ({ id, content: `# ${id}\n按证据执行最小修复。`, truncated: false, readOnly: true as const }))
@@ -132,6 +137,19 @@ describe("InkHub AI repair service", () => {
       .rejects.toThrow(/Skill|技能/u);
     expect(runner.run).not.toHaveBeenCalled();
     expect(service.getProgress("novel-one")).toMatchObject({ stage: "failed" });
+  });
+
+  it("does not use a required skill that the user disabled", async () => {
+    const runner = { run: vi.fn() };
+    const { service } = fixture(
+      runner,
+      ["consistency-check", "novel-text-polish"],
+      ["novel-text-polish"]
+    );
+
+    await expect(service.generate({ entryId: "novel-one", confirmBillable: true }))
+      .rejects.toThrow(/Skill|技能/u);
+    expect(runner.run).not.toHaveBeenCalled();
   });
 
   it("rejects model output that edits an unrequested chapter", async () => {

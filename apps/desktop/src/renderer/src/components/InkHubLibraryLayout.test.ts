@@ -29,4 +29,12 @@ describe("InkHub library layout", () => {
     expect(pageSource).toContain(':entries="novelSnapshot?.entries ?? []"');
     expect(pageSource).toContain(':refresh-key="novelSnapshot?.scannedAt ?? \'\'"');
   });
+
+  it("切换资料文档时清空旧预览并忽略乱序响应", () => {
+    expect(pageSource).toContain("documentPreview.value = null");
+    expect(pageSource).toContain("documentPreviewLoading.value = true");
+    expect(pageSource).toContain("request !== documentPreviewRequest");
+    expect(pageSource).toContain("selectedDocument.value !== document.relativePath");
+    expect(pageSource).toContain('role="alert"');
+  });
 });

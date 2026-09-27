@@ -167,7 +167,7 @@ function sensitiveBundleFile(name: string): boolean {
 export class InkHubAssetStore {
   private readonly settingsPath: string;
   private readonly capabilitiesPath: string;
-  private readonly defaultNovelRoot: string;
+  private readonly initialNovelRoot: string | null;
   private readonly novelKnowledge: InkHubNovelKnowledgeService | null;
   private readonly qualityWorker: InkHubQualityWorkerClient | null;
   private writeChain: Promise<void> = Promise.resolve();
@@ -183,7 +183,7 @@ export class InkHubAssetStore {
     userDataPath: string,
     private readonly homePath: string,
     private readonly skillDefinitions: readonly InkHubLocalSkillDefinition[] = SKILL_DEFINITIONS,
-    defaultNovelRoot = join(homePath, "Desktop", "小说"),
+    initialNovelRoot?: string,
     qualityWorkerPath?: string
   ) {
     this.settingsPath = join(userDataPath, "config", "inkhub-assets.json");
@@ -197,7 +197,10 @@ export class InkHubAssetStore {
     this.qualityWorker = qualityWorkerPath
       ? new InkHubQualityWorkerClient(qualityWorkerPath, indexDirectory)
       : null;
-    this.defaultNovelRoot = resolve(defaultNovelRoot);
+    // A root may be injected by the isolated acceptance harness, but normal
+    // installations start with no filesystem access until the user selects a
+    // folder explicitly.
+    this.initialNovelRoot = initialNovelRoot ? resolve(initialNovelRoot) : null;
   }
 
   private knowledge(): InkHubNovelKnowledgeService {
@@ -264,7 +267,11 @@ export class InkHubAssetStore {
   }
 
   private async existingRoots(settings: DiskAssetSettings): Promise<string[]> {
-    const requested = settings.novelRoots.length ? settings.novelRoots : [this.defaultNovelRoot];
+    const requested = settings.novelRoots.length
+      ? settings.novelRoots
+      : this.initialNovelRoot
+        ? [this.initialNovelRoot]
+        : [];
     return [...new Set(requested.map((root) => resolve(root)))];
   }
 

@@ -338,7 +338,29 @@ function isInstallableSkill(skill: InkHubSkillRecord): boolean {
   return skill.source !== "codex-agent" && skill.status === "verified" && skill.executable;
 }
 
-function mergeWorkspaceAgents(
+function mergeNativeAgents(
+  current: readonly ShortAgentSubagentDefinition[],
+  expected: readonly InkHubNativeAgentDefinition[]
+): { value: ShortAgentSubagentDefinition[]; added: number } {
+  const expectedIds = new Set(expected.map((agent) => agent.id));
+  const alreadySeeded = current.some((agent) => expectedIds.has(agent.id));
+  const value = [...current];
+  let added = 0;
+
+  // Once a native team exists, its records belong to the user. In particular,
+  // do not overwrite edits or infer that a missing definition should be
+  // restored: absence may be an intentional deletion.
+  if (alreadySeeded) return { value, added };
+
+  for (const agent of expected) {
+    if (value.some((candidate) => candidate.id === agent.id)) continue;
+    value.push(agent);
+    added += 1;
+  }
+  return { value, added };
+}
+
+export function mergeWorkspaceAgents(
   settings: WorkspaceAgentTeamSettings
 ): { value: WorkspaceAgentTeamSettings; added: number } {
   let added = 0;
@@ -356,18 +378,9 @@ function mergeWorkspaceAgents(
               ["inkhub_narratologist", "inkhub_psychologist", "inkhub_scene_director", "inkhub_dialogue_editor", "inkhub_continuity_editor", "inkhub_prose_editor", "inkhub_reader_advocate"].includes(agent.id)
             )
         : [];
-    const subagents = [...team.subagents];
-    for (const agent of expected) {
-      const index = subagents.findIndex((candidate) => candidate.id === agent.id);
-      if (index < 0) {
-        subagents.push(agent);
-        added += 1;
-      } else if (!matchesNativeAgent(subagents[index]!, agent)) {
-        subagents[index] = agent;
-        added += 1;
-      }
-    }
-    return { ...team, subagents };
+    const merged = mergeNativeAgents(team.subagents, expected);
+    added += merged.added;
+    return { ...team, subagents: merged.value };
   });
   return { value: { ...settings, teams } as WorkspaceAgentTeamSettings, added };
 }
@@ -383,23 +396,17 @@ function longAssignments(parentAgentId: string): readonly InkHubNativeAgentDefin
   return INKHUB_NATIVE_AGENTS.filter((agent) => ids.includes(agent.id));
 }
 
-function mergeLongAgents(
+export function mergeLongAgents(
   settings: LongAgentTeamSettings
 ): { value: LongAgentTeamSettings; added: number } {
   let added = 0;
   const teams = settings.teams.map((team) => {
-    const subagents = [...team.subagents];
-    for (const agent of longAssignments(team.parentAgentId)) {
-      const index = subagents.findIndex((candidate) => candidate.id === agent.id);
-      if (index < 0) {
-        subagents.push(agent);
-        added += 1;
-      } else if (!matchesNativeAgent(subagents[index]!, agent)) {
-        subagents[index] = agent;
-        added += 1;
-      }
-    }
-    return { ...team, subagents };
+    const merged = mergeNativeAgents(
+      team.subagents,
+      longAssignments(team.parentAgentId)
+    );
+    added += merged.added;
+    return { ...team, subagents: merged.value };
   });
   return { value: { ...settings, teams }, added };
 }

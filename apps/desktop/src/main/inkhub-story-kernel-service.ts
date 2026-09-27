@@ -179,18 +179,24 @@ const FORECAST_SYSTEM_PROMPT = [
 ].join("\n\n");
 
 export class InkHubStoryKernelService {
-  private readonly database: DatabaseSync;
+  private databaseInstance: DatabaseSync | null = null;
+  private readonly databasePath: string;
   private readonly runner: InkHubStoryKernelModelRunner;
   private readonly progress = new Map<string, InkHubStoryReconstructionProgress>();
   private readonly activeEntries = new Set<string>();
 
   constructor(private readonly options: StoryKernelServiceOptions) {
-    mkdirSync(options.storageDirectory, { recursive: true, mode: 0o700 });
-    const path = join(options.storageDirectory, "story-kernel.sqlite");
-    this.database = new DatabaseSync(path);
-    chmodSync(path, 0o600);
-    this.database.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
-    this.database.exec(`
+    this.databasePath = join(options.storageDirectory, "story-kernel.sqlite");
+    this.runner = options.runner ?? new PiInkHubStoryKernelModelRunner();
+  }
+
+  private database(): DatabaseSync {
+    if (this.databaseInstance) return this.databaseInstance;
+    mkdirSync(this.options.storageDirectory, { recursive: true, mode: 0o700 });
+    const database = new DatabaseSync(this.databasePath);
+    chmodSync(this.databasePath, 0o600);
+    database.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
+    database.exec(`
       CREATE TABLE IF NOT EXISTS story_state (
         entry_id TEXT PRIMARY KEY,
         summary_json TEXT NOT NULL
@@ -212,11 +218,17 @@ export class InkHubStoryKernelService {
       );
       CREATE INDEX IF NOT EXISTS story_forecasts_entry ON story_forecasts(entry_id, generated_at DESC);
     `);
-    this.runner = options.runner ?? new PiInkHubStoryKernelModelRunner();
+    this.databaseInstance = database;
+    return database;
   }
 
   getProgress(entryId: string): InkHubStoryReconstructionProgress | null {
     return this.progress.get(entryId) ?? null;
+  }
+
+  close(): void {
+    this.databaseInstance?.close();
+    this.databaseInstance = null;
   }
 
   private setProgress(value: Omit<InkHubStoryReconstructionProgress, "updatedAt">): void {
@@ -224,7 +236,7 @@ export class InkHubStoryKernelService {
   }
 
   private readStoredSummary(entryId: string): InkHubStoryStateSummary | null {
-    const row = this.database.prepare("SELECT summary_json FROM story_state WHERE entry_id = ?").get(entryId) as unknown as StoredSummaryRow | undefined;
+    const row = this.database().prepare("SELECT summary_json FROM story_state WHERE entry_id = ?").get(entryId) as unknown as StoredSummaryRow | undefined;
     if (!row) return null;
     try {
       return InkHubStoryStateSummarySchema.parse(JSON.parse(row.summary_json));
@@ -234,12 +246,12 @@ export class InkHubStoryKernelService {
   }
 
   private writeSummary(summary: InkHubStoryStateSummary): void {
-    this.database.prepare("INSERT OR REPLACE INTO story_state(entry_id,summary_json) VALUES (?,?)")
+    this.database().prepare("INSERT OR REPLACE INTO story_state(entry_id,summary_json) VALUES (?,?)")
       .run(summary.entryId, JSON.stringify(InkHubStoryStateSummarySchema.parse(summary)));
   }
 
   private readStoredChapters(entryId: string): Array<{ ordinal: number; state: InkHubStoryChapterState }> {
-    const rows = this.database.prepare("SELECT ordinal,source_revision,analysis_json FROM story_chapters WHERE entry_id = ? ORDER BY ordinal")
+    const rows = this.database().prepare("SELECT ordinal,source_revision,analysis_json FROM story_chapters WHERE entry_id = ? ORDER BY ordinal")
       .all(entryId) as unknown as StoredChapterRow[];
     return rows.flatMap((row) => {
       try {
@@ -338,7 +350,7 @@ export class InkHubStoryKernelService {
       const stored = new Map(this.readStoredChapters(input.entryId).map((item) => [item.state.chapterId, item]));
       const currentIds = new Set(chapters.map((chapter) => chapter.id));
       for (const chapterId of stored.keys()) {
-        if (!currentIds.has(chapterId)) this.database.prepare("DELETE FROM story_chapters WHERE entry_id = ? AND chapter_id = ?").run(input.entryId, chapterId);
+        if (!currentIds.has(chapterId)) this.database().prepare("DELETE FROM story_chapters WHERE entry_id = ? AND chapter_id = ?").run(input.entryId, chapterId);
       }
       const reused = chapters.filter((chapter) => stored.get(chapter.id)?.state.sourceRevision === chapter.sourceRevision);
       const pending = chapters.filter((chapter) => stored.get(chapter.id)?.state.sourceRevision !== chapter.sourceRevision);
@@ -386,7 +398,7 @@ export class InkHubStoryKernelService {
               summary: analysis.summary, facts, analyzedAt: new Date().toISOString()
             });
             const ordinal = chapters.findIndex((candidate) => candidate.id === chapter.id);
-            this.database.prepare(`INSERT OR REPLACE INTO story_chapters
+            this.database().prepare(`INSERT OR REPLACE INTO story_chapters
               (entry_id,chapter_id,ordinal,source_revision,analysis_json) VALUES (?,?,?,?,?)`)
               .run(input.entryId, chapter.id, ordinal, chapter.sourceRevision, JSON.stringify(state));
             completed += 1;
@@ -469,7 +481,7 @@ export class InkHubStoryKernelService {
         evidence: this.evidenceForChapterIds(stored, branch.evidenceChapterIds) })),
       canonical: false, stale: false
     });
-    this.database.prepare("INSERT INTO story_forecasts(id,entry_id,result_json,generated_at) VALUES (?,?,?,?)")
+    this.database().prepare("INSERT INTO story_forecasts(id,entry_id,result_json,generated_at) VALUES (?,?,?,?)")
       .run(forecast.id, input.entryId, JSON.stringify(forecast), forecast.generatedAt);
     return forecast;
   }
@@ -478,7 +490,7 @@ export class InkHubStoryKernelService {
     const index = await this.options.assets.getNovelIndex(entryId);
     const summary = this.readStoredSummary(entryId);
     const stale = !summary || !index.contentHash || summary.sourceContentHash !== index.contentHash;
-    const rows = this.database.prepare("SELECT result_json FROM story_forecasts WHERE entry_id = ? ORDER BY generated_at DESC LIMIT 100")
+    const rows = this.database().prepare("SELECT result_json FROM story_forecasts WHERE entry_id = ? ORDER BY generated_at DESC LIMIT 100")
       .all(entryId) as unknown as StoredForecastRow[];
     const forecasts = rows.flatMap((row) => {
       try {

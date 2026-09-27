@@ -125,7 +125,8 @@ export const InkHubNovelChapterRepairInputSchema = z.object({
   entryId: z.string().min(1),
   chapterId: z.string().min(1).max(128),
   expectedSourceRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-  content: z.string().min(1).max(2_000_000)
+  content: z.string().min(1).max(2_000_000),
+  confirmWrite: z.literal(true)
 }).strict();
 export type InkHubNovelChapterRepairInput = z.infer<typeof InkHubNovelChapterRepairInputSchema>;
 
@@ -212,7 +213,7 @@ export type InkHubNovelAiRepairProgress = z.infer<typeof InkHubNovelAiRepairProg
 
 export const InkHubNovelAiRepairTaskSchema = z.object({
   entryId: z.string().min(1),
-  status: z.enum(["running", "paused", "completed", "failed", "cancelled"]),
+  status: z.enum(["running", "paused", "completed", "failed", "cancelled", "consumed"]),
   sourceContentHash: z.string().regex(/^[a-f0-9]{64}$/u),
   requestedModelId: z.string().min(1).max(120).nullable(),
   progress: InkHubNovelAiRepairProgressSchema,

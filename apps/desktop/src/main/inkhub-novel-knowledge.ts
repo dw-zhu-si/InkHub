@@ -541,6 +541,12 @@ export class InkHubNovelKnowledgeService {
   private readonly indexDirectory: string;
   private repairChain: Promise<void> = Promise.resolve();
 
+  private enqueueRepair<T>(repair: () => Promise<T>): Promise<T> {
+    const operation = this.repairChain.then(repair);
+    this.repairChain = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
   constructor(indexDirectory: string) {
     this.indexDirectory = indexDirectory;
     mkdirSync(indexDirectory, { recursive: true, mode: 0o700 });
@@ -1096,6 +1102,12 @@ export class InkHubNovelKnowledgeService {
   async applyChapterRepair(
     input: InkHubNovelChapterRepairInput & { entryPath: string }
   ): Promise<InkHubNovelChapterRepairResult> {
+    return this.enqueueRepair(() => this.applyChapterRepairLocked(input));
+  }
+
+  private async applyChapterRepairLocked(
+    input: InkHubNovelChapterRepairInput & { entryPath: string }
+  ): Promise<InkHubNovelChapterRepairResult> {
     const row = this.database.prepare("SELECT * FROM chapters WHERE entry_id = ? AND id = ?").get(input.entryId, input.chapterId) as unknown as ChapterRow | undefined;
     if (!row || row.source_revision !== input.expectedSourceRevision) {
       throw new Error("原稿索引已变化，请重新质检并打开最新章节后再修复。");
@@ -1155,7 +1167,7 @@ export class InkHubNovelKnowledgeService {
     repairs: readonly InkHubNovelBatchRepairItem[];
   }): Promise<InkHubNovelBatchRepairResult> {
     let resolved: InkHubNovelBatchRepairResult | undefined;
-    const operation = this.repairChain.then(async () => {
+    const operation = this.enqueueRepair(async () => {
       if (!input.repairs.length) throw new Error("批量修复至少需要一章。");
       const freshness = await this.refreshSourceFreshness(input.entryId, input.entryPath);
       if (freshness.status === "stale") throw new Error(staleWarning(freshness));
@@ -1273,6 +1285,13 @@ export class InkHubNovelKnowledgeService {
           for (const file of committed.reverse()) {
             const rollbackPath = join(dirname(file.sourcePath), `.inkhub-repair-rollback-${randomUUID()}.tmp`);
             try {
+              const currentBytes = await readFile(file.sourcePath);
+              if (!currentBytes.equals(file.repairedBytes)) {
+                rollbackErrors.push(
+                  `源文件 ${file.relativePath} 在提交后再次变化；为避免覆盖新内容，未自动回滚`
+                );
+                continue;
+              }
               await writeFile(rollbackPath, file.originalBytes, { flag: "wx", mode: file.mode });
               await rename(rollbackPath, file.sourcePath);
             } catch (rollbackError: unknown) {
@@ -1291,7 +1310,6 @@ export class InkHubNovelKnowledgeService {
         );
       }
     });
-    this.repairChain = operation.then(() => undefined, () => undefined);
     await operation;
     return resolved!;
   }

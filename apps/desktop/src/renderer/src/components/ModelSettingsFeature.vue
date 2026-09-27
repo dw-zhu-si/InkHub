@@ -779,7 +779,6 @@ function setDefaultModel(modelId: string): void {
     return;
   }
   draftDefaultModelId.value = modelId;
-  submitModelSettings();
 }
 
 function submitModelSettings(): void {

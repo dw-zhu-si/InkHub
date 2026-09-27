@@ -98,12 +98,12 @@ describe("ModelSettingsFeature remote model ids", () => {
 });
 
 describe("ModelSettingsFeature model draft lifecycle", () => {
-  it("persists a newly selected default model immediately", () => {
+  it("keeps a newly selected default model in the draft until explicit save", () => {
     const start = source.indexOf("function setDefaultModel(");
     const end = source.indexOf("function submitModelSettings(", start);
     const body = source.slice(start, end);
     expect(body).toContain("draftDefaultModelId.value = modelId;");
-    expect(body).toContain("submitModelSettings();");
+    expect(body).not.toContain("submitModelSettings();");
     expect(source).toContain(':disabled="modelSaving || Boolean(modelEditor)"');
   });
 

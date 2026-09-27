@@ -3,6 +3,7 @@ import {
   InkHubNovelAiRepairPlanSchema,
   InkHubNovelAiRepairProgressSchema,
   InkHubNovelAiRepairRequestSchema,
+  InkHubNovelChapterRepairInputSchema,
   InkHubNovelBatchRepairInputSchema
 } from "./inkhub-reader";
 
@@ -72,6 +73,19 @@ describe("InkHub AI repair contracts", () => {
   });
 
   it("requires a separate write confirmation and bounds aggregate repair content", () => {
+    expect(() => InkHubNovelChapterRepairInputSchema.parse({
+      entryId: "novel-one",
+      chapterId: "chapter-one",
+      expectedSourceRevision: revision,
+      content: "新正文"
+    })).toThrow();
+    expect(InkHubNovelChapterRepairInputSchema.parse({
+      entryId: "novel-one",
+      chapterId: "chapter-one",
+      expectedSourceRevision: revision,
+      content: "新正文",
+      confirmWrite: true
+    }).confirmWrite).toBe(true);
     expect(() => InkHubNovelBatchRepairInputSchema.parse({
       entryId: "novel-one",
       confirmWrite: false,

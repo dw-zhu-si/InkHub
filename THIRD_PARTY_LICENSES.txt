@@ -1,7 +1,7 @@
 墨枢（InkHub）第三方许可证与版权声明
 
-应用版本：0.3.1
-pnpm-lock.yaml SHA-256：bebdb8681cea5391f778a6e6b4109d0d19c08264dd81a661e74fde1b93681fe7
+应用版本：0.3.2
+pnpm-lock.yaml SHA-256：ffbd40bdde8491cd0f84fcb4f79b5b682cd1002c42d8709af7556977141332c5
 生成命令：node tools/generate-third-party-licenses.mjs
 只读复验：node tools/generate-third-party-licenses.mjs --check
 
@@ -11958,7 +11958,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-js-yaml@4.3.1
+js-yaml@4.3.2
 声明许可证：MIT
 证据类型：installed-notice
 

@@ -22,6 +22,18 @@ const { validateConfiguration } = electronBuilderRequire(
 };
 
 describe("release packaging configuration", () => {
+  it("pins the patched YAML parser used by update and packaging metadata", async () => {
+    const [workspaceConfig, lockfile] = await Promise.all([
+      readFile(new URL("pnpm-workspace.yaml", workspaceRoot), "utf8"),
+      readFile(new URL("pnpm-lock.yaml", workspaceRoot), "utf8")
+    ]);
+    const installedVersion = (electronBuilderRequire("js-yaml/package.json") as { version: string }).version;
+
+    expect(workspaceConfig).toMatch(/overrides:\s*[\s\S]*?js-yaml:\s*4\.3\.2/u);
+    expect(lockfile).toMatch(/overrides:\s*[\s\S]*?js-yaml:\s*4\.3\.2/u);
+    expect(installedVersion).toBe("4.3.2");
+  });
+
   it("keeps test signing separate and requires Developer ID, hardened runtime and notarization for release", async () => {
     const [testConfig, releaseConfig] = await Promise.all([
       readFile(new URL("electron-builder.yml", desktopRoot), "utf8"),
@@ -45,6 +57,7 @@ describe("release packaging configuration", () => {
     const releaseRunner = await readFile(new URL("tools/run-release-package.mjs", workspaceRoot), "utf8");
     expect(releaseRunner).toContain('mkdtemp(join(tmpdir(), "inkhub-release-work-"))');
     expect(releaseRunner).not.toContain('mkdtemp(join(releaseDirectory, ".release-work-"))');
+    expect(releaseRunner).toContain('`--config.mac.identity=${signing.qualifier}`');
   });
 
   it("detects File Provider and signing detritus without treating ordinary metadata as forbidden", async () => {
@@ -98,7 +111,8 @@ describe("release packaging configuration", () => {
     expect(configSource).toMatch(/target:\s*\n\s+- mas/u);
     expect(configSource).toContain('identity: "${env.INKHUB_APPLE_SIGNING_IDENTITY}"');
     expect(configSource).toContain("type: distribution");
-    expect(configSource).toContain('bundleVersion: "1"');
+    expect(configSource).toContain('buildVersion: "2"');
+    expect(configSource).not.toContain("bundleVersion:");
     expect(configSource).toContain('ElectronTeamID: "${env.INKHUB_APPLE_TEAM_ID}"');
     expect(configSource).toContain("entitlements: build/entitlements.mas.plist");
     expect(configSource).toContain("entitlementsInherit: build/entitlements.mas.inherit.plist");
@@ -121,6 +135,10 @@ describe("release packaging configuration", () => {
     expect(runner).toContain("INKHUB_MAS_PROVISIONING_PROFILE");
     expect(runner).toContain('selectAppleSigningIdentity');
     expect(runner).toContain('INKHUB_APPLE_SIGNING_IDENTITY');
+    expect(runner).toContain('`--config.mas.identity=${signing.qualifier}`');
+    expect(runner).toContain('`--config.mas.extendInfo.ElectronTeamID=${signing.teamId}`');
+    expect(runner).toContain('`--config.buildVersion=${buildVersion}`');
+    expect(runner).toContain("expectedBuildVersion: buildVersion");
     expect(configSource).not.toMatch(/ElectronTeamID:\s*[A-Z0-9]{10}/u);
     expect(configSource).not.toMatch(/identity:\s*"(?!\$\{env\.)/u);
     expect(runner).toContain('"--mac", "mas", "--arm64"');

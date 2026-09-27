@@ -2,13 +2,31 @@ import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { InkHubNovelKnowledgeService } from "./inkhub-novel-knowledge";
 import { buildDocx, buildEpub } from "./short-manuscript-export";
+
+const repairFsInterception = vi.hoisted(() => ({
+  afterRename: undefined as
+    | ((source: string, destination: string) => Promise<void> | void)
+    | undefined
+}));
+
+vi.mock("node:fs/promises", async () => {
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  return {
+    ...actual,
+    async rename(source: Parameters<typeof actual.rename>[0], destination: Parameters<typeof actual.rename>[1]) {
+      await actual.rename(source, destination);
+      await repairFsInterception.afterRename?.(String(source), String(destination));
+    }
+  };
+});
 
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
+  repairFsInterception.afterRename = undefined;
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -390,7 +408,8 @@ describe("InkHubNovelKnowledgeService", () => {
       entryPath: novel,
       chapterId: target.id,
       expectedSourceRevision: target.sourceRevision,
-      content: "# 第2章 来信\n第二章修复后的正文。"
+      content: "# 第2章 来信\n第二章修复后的正文。",
+      confirmWrite: true
     });
 
     expect(repaired.backupCreated).toBe(true);
@@ -407,8 +426,37 @@ describe("InkHubNovelKnowledgeService", () => {
       entryPath: novel,
       chapterId: target.id,
       expectedSourceRevision: target.sourceRevision,
-      content: "# 第2章 来信\n过期内容。"
+      content: "# 第2章 来信\n过期内容。",
+      confirmWrite: true
     })).rejects.toThrow(/原稿已变化|索引已变化/u);
+  });
+
+  it("两个相同 revision 的单章修复并发时只接受先进入队列的写入", async () => {
+    const { novel, service } = await fixture();
+    const sourcePath = join(novel, "正文", "并发.md");
+    await writeFile(sourcePath, "# 第1章 并发\n旧正文。", "utf8");
+    await service.build({ entryId: "novel-concurrent-repair", title: "并发修复", entryPath: novel });
+    const target = service.listChapters("novel-concurrent-repair", 0, 20).chapters[0]!;
+    const common = {
+      entryId: "novel-concurrent-repair",
+      entryPath: novel,
+      chapterId: target.id,
+      expectedSourceRevision: target.sourceRevision,
+      confirmWrite: true as const
+    };
+
+    const [first, second] = await Promise.allSettled([
+      service.applyChapterRepair({ ...common, content: "# 第1章 并发\n第一份修复。" }),
+      service.applyChapterRepair({ ...common, content: "# 第1章 并发\n第二份修复。" })
+    ]);
+
+    expect(first.status).toBe("fulfilled");
+    expect(second.status).toBe("rejected");
+    if (second.status === "rejected") {
+      expect(second.reason).toBeInstanceOf(Error);
+      expect((second.reason as Error).message).toMatch(/原稿索引已变化|原稿已变化/u);
+    }
+    expect(await readFile(sourcePath, "utf8")).toBe("# 第1章 并发\n第一份修复。");
   });
 
   it("整批预检后一次写回同文件多章，任一版本过期时不改任何原稿", async () => {
@@ -460,5 +508,40 @@ describe("InkHubNovelKnowledgeService", () => {
     })).rejects.toThrow(/变化|过期|版本/u);
     expect(await readFile(firstPath, "utf8")).toBe(beforeFirst);
     expect(await readFile(secondPath, "utf8")).toBe(beforeSecond);
+  });
+
+  it("批量提交失败时不用旧备份覆盖已经再次变化的文件", async () => {
+    const { novel, service } = await fixture();
+    const firstPath = join(novel, "正文", "第一卷.md");
+    const secondPath = join(novel, "正文", "第二卷.md");
+    await writeFile(firstPath, "# 第一卷\n## 第1章\n第一章旧正文。", "utf8");
+    await writeFile(secondPath, "# 第二卷\n## 第1章\n第二章旧正文。", "utf8");
+    await service.build({ entryId: "novel-rollback-cas", title: "回滚保护", entryPath: novel });
+    const chapters = service.listChapters("novel-rollback-cas", 0, 20).chapters;
+    const first = chapters.find((chapter) => chapter.relativePath === "正文/第一卷.md")!;
+    const second = chapters.find((chapter) => chapter.relativePath === "正文/第二卷.md")!;
+    const externallyUpdatedFirst = "# 第一卷\n## 第1章\n提交后的外部新内容。";
+    const externallyUpdatedSecond = "# 第二卷\n## 第1章\n提交期间的外部新内容。";
+    let injected = false;
+    repairFsInterception.afterRename = async (source) => {
+      if (!injected && source.includes(".inkhub-repair-batch-")) {
+        injected = true;
+        await writeFile(firstPath, externallyUpdatedFirst, "utf8");
+        await writeFile(secondPath, externallyUpdatedSecond, "utf8");
+      }
+    };
+
+    await expect(service.applyChapterRepairs({
+      entryId: "novel-rollback-cas",
+      entryPath: novel,
+      repairs: [
+        { chapterId: first.id, expectedSourceRevision: first.sourceRevision, content: `${first.title}\n第一章批量修复。` },
+        { chapterId: second.id, expectedSourceRevision: second.sourceRevision, content: `${second.title}\n第二章批量修复。` }
+      ]
+    })).rejects.toThrow(/回滚不完整|再次变化/u);
+
+    expect(injected).toBe(true);
+    expect(await readFile(firstPath, "utf8")).toBe(externallyUpdatedFirst);
+    expect(await readFile(secondPath, "utf8")).toBe(externallyUpdatedSecond);
   });
 });
