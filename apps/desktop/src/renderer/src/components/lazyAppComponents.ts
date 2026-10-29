@@ -1,7 +1,24 @@
-import { defineAsyncComponent } from "vue";
+import { defineAsyncComponent, h } from "vue";
+import { uiMessage } from "../ui-feedback";
 
 // The default three-pane writing surface stays in the entry chunk. Each
 // top-level feature and modal-only component gets its own on-demand chunk.
+// Approval/subagent panels are not needed by an empty conversation. Keep their
+// validation and review behavior intact, but load their UI only when rendered.
+const conversationPanelOptions = {
+  delay: 120,
+  timeout: 10_000,
+  loadingComponent: { render: () => h("p", { role: "status", "aria-live": "polite", class: "conversation-panel-load-status" }, "正在加载审阅面板……") },
+  errorComponent: { render: () => h("p", { role: "alert", class: "conversation-panel-load-status" }, "面板加载失败，请重新打开作品后重试。原稿未修改。") },
+  onError(_error: Error, retry: () => void, fail: () => void, attempts: number) {
+    if (attempts < 2) retry();
+    else { uiMessage.error("审阅面板加载失败，请重新打开作品后重试。原稿未修改。"); fail(); }
+  }
+};
+export const AgentEditProposalCard = defineAsyncComponent({ ...conversationPanelOptions, loader: () => import("./AgentEditProposalCard.vue") });
+export const LongProposalReview = defineAsyncComponent({ ...conversationPanelOptions, loader: () => import("./LongProposalReview.vue") });
+export const SubagentRunList = defineAsyncComponent({ ...conversationPanelOptions, loader: () => import("./SubagentRunList.vue") });
+
 export const AgentTeamSettingsPanel = defineAsyncComponent(
   () => import("./AgentTeamSettingsPanel.vue")
 );
@@ -37,6 +54,15 @@ export const WorkspaceFeatureModules = defineAsyncComponent(
 );
 export const WorkspaceDialogLayer = defineAsyncComponent(
   () => import("./WorkspaceDialogLayer.vue")
+);
+export const WritingGettingStartedDialog = defineAsyncComponent(
+  () => import("./WritingGettingStartedDialog.vue")
+);
+export const TopicArchiveDialog = defineAsyncComponent(
+  () => import("./TopicArchiveDialog.vue")
+);
+export const AuthorPreferencesDialog = defineAsyncComponent(
+  () => import("./AuthorPreferencesDialog.vue")
 );
 
 export const BookResourceDialog = defineAsyncComponent(

@@ -41,11 +41,9 @@ import {
 import { createEditorReferenceAttachment } from "../utils/editorTextReferences";
 import { writeToolText } from "../utils/agentWriteToolPreview";
 import AppIcon from "./AppIcon.vue";
-import AgentEditProposalCard from "./AgentEditProposalCard.vue";
-import LongProposalReview from "./LongProposalReview.vue";
+import { AgentEditProposalCard, LongProposalReview, SubagentRunList } from "./lazyAppComponents";
 import PopupSelect from "./PopupSelect.vue";
 import StreamedContent from "./StreamedContent.vue";
-import SubagentRunList from "./SubagentRunList.vue";
 
 const props = withDefaults(
   defineProps<{

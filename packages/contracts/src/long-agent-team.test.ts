@@ -17,10 +17,26 @@ describe("long agent team contracts", () => {
 
   it("rejects duplicate or missing long parent roles", () => {
     const settings = structuredClone(DEFAULT_LONG_AGENT_TEAM_SETTINGS);
-    settings.teams[4] = structuredClone(settings.teams[0]!);
+    settings.teams[3] = structuredClone(settings.teams[0]!);
     expect(() => LongAgentTeamSettingsSchema.parse(settings)).toThrow(
-      /Duplicate|Missing/
+      /Duplicate/
     );
+    expect(() => LongAgentTeamSettingsSchema.parse(settings)).toThrow(/Missing/);
+  });
+
+  it("enforces four roles and fails fast for an oversized list", () => {
+    for (const count of [3, 5]) {
+      const settings = structuredClone(DEFAULT_LONG_AGENT_TEAM_SETTINGS);
+      settings.teams = Array.from({ length: count }, () => structuredClone(settings.teams[0]!));
+      const result = LongAgentTeamSettingsSchema.safeParse(settings);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues).toEqual(expect.arrayContaining([expect.objectContaining({
+          code: count > 4 ? "too_big" : "too_small", path: ["teams"]
+        })]));
+        if (count > 4) expect(result.error.issues).toHaveLength(1);
+      }
+    }
   });
 
   it("validates independent list and save commands", () => {

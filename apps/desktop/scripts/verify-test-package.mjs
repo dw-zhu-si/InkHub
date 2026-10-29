@@ -1,23 +1,25 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { release, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(scriptDir, "..");
-const releaseDir = join(appDir, "release");
-const [targetPlatform, targetArch] = process.argv.slice(2);
+const [targetPlatform, targetArch, outputFlag, outputDirectory, ...extra] = process.argv.slice(2);
 
 if (
   !(
     (targetPlatform === "mac" && (targetArch === "arm64" || targetArch === "x64")) ||
     (targetPlatform === "win" && (targetArch === "arm64" || targetArch === "x64"))
-  )
+  ) || extra.length > 0 ||
+  (outputFlag !== undefined &&
+    (outputFlag !== "--release-dir" || !outputDirectory || !isAbsolute(outputDirectory)))
 ) {
-  console.error("Usage: node scripts/verify-test-package.mjs <mac arm64|mac x64|win arm64|win x64>");
+  console.error("Usage: node scripts/verify-test-package.mjs <mac arm64|mac x64|win arm64|win x64> [--release-dir <absolute-path>]");
   process.exit(1);
 }
+const releaseDir = outputDirectory ? resolve(outputDirectory) : join(appDir, "release");
 
 const packageJson = JSON.parse(await readFile(join(appDir, "package.json"), "utf8"));
 const artifactBase = `InkHub-${packageJson.version}-${targetPlatform}-${targetArch}-test`;

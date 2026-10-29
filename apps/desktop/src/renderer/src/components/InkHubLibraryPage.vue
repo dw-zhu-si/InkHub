@@ -17,6 +17,7 @@ import AppIcon from "./AppIcon.vue";
 import PopupSelect from "./PopupSelect.vue";
 import InkHubNovelReader from "./InkHubNovelReader.vue";
 import InkHubIndexCenter from "./InkHubIndexCenter.vue";
+import InkHubNovelHealth from "./InkHubNovelHealth.vue";
 import { uiMessage } from "../ui-feedback";
 import {
   INKHUB_NATIVE_AGENTS,
@@ -27,7 +28,7 @@ import { INKHUB_PLOT_SKILLS } from "../utils/inkhubPlotSkills";
 import { INKHUB_STORY_KERNEL_SKILLS } from "../utils/inkhubStoryKernelSkills";
 import { INKHUB_COVER_SKILLS } from "../utils/inkhubCoverSkills";
 
-type Tab = "novels" | "skills" | "agents" | "media";
+type Tab = "novels" | "skills" | "agents" | "media" | "health";
 
 const emit = defineEmits<{ catalogChanged: [] }>();
 
@@ -481,6 +482,9 @@ onMounted(async () => {
       <button :class="{ active: tab === 'media' }" type="button" :aria-current="tab === 'media' ? 'page' : undefined" @click="switchTab('media')">
         <AppIcon name="image" :size="16" />视觉工坊
       </button>
+      <button :class="{ active: tab === 'health' }" type="button" :aria-current="tab === 'health' ? 'page' : undefined" @click="switchTab('health')">
+        <AppIcon name="search" :size="16" />作品体检
+      </button>
     </nav>
 
     <div v-if="tab === 'novels' || tab === 'skills'" class="library-toolbar">
@@ -512,6 +516,8 @@ onMounted(async () => {
         <AppIcon name="redo" :size="16" />
       </button>
     </div>
+
+    <InkHubNovelHealth v-if="tab === 'health'" :entries="novelSnapshot?.entries ?? []" :roots="novelSnapshot?.roots ?? []" :scanned-at="novelSnapshot?.scannedAt ?? ''" @open-reader="readerEntry = $event" />
 
     <template v-if="tab === 'novels'">
       <InkHubIndexCenter
@@ -673,7 +679,7 @@ onMounted(async () => {
       <div class="agent-callout"><strong>真实调用链</strong><span>这些不是标签：安装后会进入短篇、剧本和长篇的 Agent Team，由主智能体通过 spawn_subagent 调用，并继承当前已选模型。</span></div>
     </template>
 
-    <template v-else>
+    <template v-else-if="tab === 'media'">
       <div class="media-toolbar">
         <PopupSelect v-model="mediaEntryId" :options="mediaNovelOptions" accessible-label="选择要制作视觉素材的小说" />
         <PopupSelect v-model="mediaModelId" :options="mediaModelOptions" accessible-label="选择图片模型" placeholder="先在模型配置添加图片模型" :aria-describedby="!mediaModelOptions.length ? 'media-model-warning' : undefined" />

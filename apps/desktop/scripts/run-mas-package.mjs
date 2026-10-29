@@ -248,6 +248,7 @@ async function main() {
   const output = await mkdtemp(join(tmpdir(), "inkhub-mas-release-work-"));
   let promoted = false;
   try {
+    await run("pnpm", ["audit"], { environment: buildEnvironment });
     await run("pnpm", ["verify"], { environment: buildEnvironment });
     await run(process.execPath, [join(WORKSPACE_ROOT, "tools/generate-third-party-licenses.mjs"), "--check"], {
       environment: buildEnvironment

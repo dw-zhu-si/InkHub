@@ -1,6 +1,6 @@
 {
   "name": "@deepwrite/desktop",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "墨枢（InkHub）本地 AI 小说创作与管理桌面端",
   "author": "zhusi",
   "license": "Apache-2.0",
@@ -35,16 +35,16 @@
     "naive-ui": "2.44.1",
     "pdfjs-dist": "6.2.108",
     "pinia": "3.0.4",
-    "vue": "3.5.39"
+    "vue": "3.5.42"
   },
   "devDependencies": {
     "@types/node": "26.4.0",
     "@vitejs/plugin-vue": "6.0.8",
-    "electron": "44.0.0",
+    "electron": "44.10.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "typescript": "6.0.3",
-    "vite": "7.3.6",
+    "vite": "7.3.7",
     "vue-tsc": "3.3.11"
   }
 }

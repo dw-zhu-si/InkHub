@@ -4,7 +4,7 @@ extends: ./electron-builder.yml
 # Distribution signing path. They must never inherit Developer ID notarization.
 artifactName: "InkHub-${version}-mas-${arch}.${ext}"
 forceCodeSigning: true
-buildVersion: "2"
+buildVersion: "3"
 
 mac:
   target:

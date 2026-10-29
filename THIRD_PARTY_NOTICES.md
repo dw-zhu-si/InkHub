@@ -22,6 +22,12 @@ DeepWrite 以 Apache License 2.0 授权。本项目根目录中的 `LICENSE` 保
 
 项目内的“小说封面艺术指导”Skill、24 种封面风格描述、提示词编译器和本地排版实现均为墨枢独立编写；该来源只作为方法研究记录，不构成其内容已被安装或再分发。
 
+## 墨枢原创指令文本许可
+
+随本仓库分发、由墨枢独立编写的 Agent 和 Skill 指令文本，包括十项全书创作内核（story-kernel）Skills，按根目录的 Apache License 2.0 发布。部分早期 HTML 元数据尾注中的 `license:project-proprietary` 仅标记项目自有的来源和所有权，不另设专有授权条件，也不限制本仓库许可证已经授予的使用、修改和再分发权利。
+
+本声明不向未随仓库分发的本机外部 Skill、用户小说、个人素材或第三方内容授予权利；这些内容仍由各自权利人和适用许可证约束。
+
 ## 已安装生产依赖
 
 桌面端已安装 production 依赖及 Electron 运行时的许可证原文、版权声明和生成校验信息见 `THIRD_PARTY_LICENSES.txt`。该文件由 `node tools/generate-third-party-licenses.mjs` 生成，可使用 `--check` 做只读复验。

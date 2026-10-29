@@ -6,6 +6,12 @@ directories:
   output: release
   buildResources: build
 
+# electron-builder 的旧版 NSIS 工具包只包含 Intel macOS 编译器，
+# 在 Apple Silicon 上会以系统错误 -86 失败。1.2.1 提供原生
+# darwin-arm64 makensis，同时保持 Windows 安装器格式不变。
+toolsets:
+  nsis: "1.2.1"
+
 files:
   - out/**/*
   - package.json

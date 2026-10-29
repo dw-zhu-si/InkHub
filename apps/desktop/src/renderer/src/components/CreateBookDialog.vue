@@ -32,6 +32,7 @@ const props = withDefaults(
     skillGroups?: readonly SkillLibraryGroup[];
     loading?: boolean;
     submitting?: boolean;
+    topicSeed?: { title: string; genre: string; promise: string; conflict: string; audience: string } | undefined;
   }>(),
   {
     materials: () => [],
@@ -288,9 +289,9 @@ function selectedSkillLinks(): Record<SkillKind, string[]> {
 }
 
 function resetDraft(): void {
-  title.value = "";
+  title.value = props.topicSeed?.title ?? "";
   workspaceType.value = "short";
-  genre.value = "世情";
+  genre.value = SHORT_BOOK_GENRES.includes(props.topicSeed?.genre as typeof SHORT_BOOK_GENRES[number]) ? props.topicSeed!.genre : "世情";
   materialBindingMode.value = "single";
   skillBindingMode.value = "single";
   selectedMaterialGroupId.value = "";
@@ -432,6 +433,13 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 
           <section class="create-short-book-basics" aria-labelledby="create-short-basics-heading">
             <h3 id="create-short-basics-heading">书籍信息</h3>
+            <aside v-if="topicSeed" class="topic-seed-preview" aria-label="立项资料">
+              <strong>来自选题：{{ topicSeed.title }}</strong>
+              <p>目标读者：{{ topicSeed.audience || '待补充' }}</p>
+              <p>读者承诺：{{ topicSeed.promise || '待补充' }}</p>
+              <p>核心冲突：{{ topicSeed.conflict || '待补充' }}</p>
+              <small>创建成功后关联此选题；资料在本书创作对话中可用。</small>
+            </aside>
             <label class="create-short-book-field">
               <span>书名</span>
               <input

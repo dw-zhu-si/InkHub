@@ -9,6 +9,13 @@ export interface InkHubRendererAcceptanceResult {
   viewport: { width: number; height: number };
   documentWidth: { client: number; scroll: number };
   unnamedControls: number;
+  writingGuideReady: boolean;
+  topicArchiveReady: boolean;
+  outlineReportReady: boolean;
+  topicBookReady: boolean;
+  authorPreferencesReady: boolean;
+  novelHealthReady: boolean;
+  outlineContentReady: boolean;
   reader: { chapters: number; volumeGroups: number; repairReady: boolean; aiRepairReady: boolean; aiRepairSelectionReady: boolean; deepQualityReady: boolean; storyStateReady: boolean; continuationReady: boolean; forecastReady: boolean; searchResults: number; qualityCoverage: string };
 }
 
@@ -62,6 +69,114 @@ const acceptanceScript = String.raw`
   await clickSelector('[data-nav-id="inkhub-library"]', '.inkhub-library');
   visited.push('novels');
 
+  const moreToggle = await waitFor('[data-nav-id="more"]');
+  moreToggle.click();
+  const guideEntry = await waitFor('[data-feature-id="writing-guide"]');
+  guideEntry.focus();
+  guideEntry.click();
+  const guideDialog = await waitFor('.getting-started-dialog');
+  if (guideDialog.getAttribute('role') !== 'dialog' || guideDialog.getAttribute('aria-modal') !== 'true') {
+    throw new Error('Writing guide is not exposed as an accessible modal dialog.');
+  }
+  const workflowButtons = Array.from(guideDialog.querySelectorAll('.getting-started-workflows button'));
+  if (workflowButtons.length !== 3) throw new Error('Writing guide does not offer short, script and long workflows.');
+  workflowButtons[2].click();
+  await sleep(80);
+  if (workflowButtons[2].getAttribute('aria-pressed') !== 'true') {
+    throw new Error('Writing guide could not switch to the long-novel workflow.');
+  }
+  const guideSteps = Array.from(guideDialog.querySelectorAll('.getting-started-steps button'));
+  if (guideSteps.length !== 6) throw new Error('Writing guide does not contain the six-step creation journey.');
+  guideSteps[1].click();
+  await sleep(80);
+  if (!(guideDialog.querySelector('.getting-started-detail')?.textContent || '').includes('剧情点与章卡都归属到对应卷')) {
+    throw new Error('Long-novel guide does not explain volume-separated structure.');
+  }
+  const skipStep = Array.from(guideDialog.querySelectorAll('.getting-started-actions button')).find(
+    (button) => button.textContent && button.textContent.includes('跳过此步')
+  );
+  if (!skipStep) throw new Error('Writing guide cannot skip a step.');
+  skipStep.click();
+  let savedGuideState = null;
+  const guideSaveStarted = Date.now();
+  while (Date.now() - guideSaveStarted < 3000) {
+    await sleep(60);
+    try {
+      savedGuideState = JSON.parse(localStorage.getItem('inkhub-writing-getting-started-v1') || 'null');
+    } catch {
+      savedGuideState = null;
+    }
+    if (savedGuideState?.statuses?.long?.outline === 'skipped') break;
+  }
+  if (savedGuideState?.statuses?.long?.outline !== 'skipped') {
+    throw new Error('Writing guide progress was not persisted locally.');
+  }
+  await sleep(100);
+  await captureCheckpoint('09-writing-guide-1440x900');
+  guideDialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await sleep(80);
+  if (document.querySelector('.getting-started-dialog')) {
+    throw new Error('Writing guide does not close on Escape.');
+  }
+  if (document.activeElement !== guideEntry) {
+    throw new Error('Writing guide did not return focus to its opener.');
+  }
+  visited.push('writing-guide');
+
+  const topicArchiveEntry = await waitFor('[data-feature-id="topic-archive"]');
+  topicArchiveEntry.click();
+  const topicArchive = await waitFor('.topic-archive-dialog');
+  const newTopic = Array.from(topicArchive.querySelectorAll('button')).find((button) =>
+    (button.textContent || '').includes('新建选题')
+  );
+  if (!newTopic) throw new Error('Topic archive cannot create a new record.');
+  newTopic.click();
+  const topicTitle = await waitFor('.topic-archive-form input[maxlength="160"]');
+  topicTitle.value = '验收用选题档案';
+  topicTitle.dispatchEvent(new Event('input', { bubbles: true }));
+  const topicSave = await waitFor('.topic-archive-form button[type="submit"]');
+  topicSave.click();
+  await waitFor('.topic-archive-record-header h3');
+  const proofLabel = await waitFor('.topic-archive-evidence-form input[maxlength="200"]');
+  proofLabel.value = '作者提供样本';
+  proofLabel.dispatchEvent(new Event('input', { bubbles: true }));
+  const proofNote = await waitFor('.topic-archive-evidence-form textarea');
+  proofNote.value = '验证可追溯证据记录';
+  proofNote.dispatchEvent(new Event('input', { bubbles: true }));
+  const proofAdd = await waitFor('.topic-archive-evidence-form button[type="submit"]');
+  proofAdd.click();
+  await waitFor('.topic-archive-proof');
+  const savedTopics = JSON.parse(localStorage.getItem('inkhub-topic-archive-v1') || '[]');
+  if (!savedTopics.some((record) => record.title === '验收用选题档案' && record.evidence?.length === 1)) {
+    throw new Error('Topic archive record or its provenance evidence was not persisted locally.');
+  }
+  await sleep(150);
+  await captureCheckpoint('10-topic-archive-1440x900');
+  topicArchive.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await sleep(80);
+  if (document.querySelector('.topic-archive-dialog')) throw new Error('Topic archive does not close on Escape.');
+  visited.push('topic-archive');
+
+  (await waitFor('[data-feature-id="author-preferences"]')).click();
+  const preferencesDialog = await waitFor('.author-preferences-dialog');
+  Array.from(preferencesDialog.querySelectorAll('button')).find((button) => button.textContent.includes('新增偏好')).click();
+  const preferenceLabel = await waitFor('.author-preferences-form input[maxlength="80"]');
+  preferenceLabel.value = '验收表达习惯'; preferenceLabel.dispatchEvent(new Event('input', { bubbles: true }));
+  const preferenceContent = await waitFor('.author-preferences-form textarea');
+  preferenceContent.value = '通过人物动作呈现紧张，保留含蓄对白。'; preferenceContent.dispatchEvent(new Event('input', { bubbles: true }));
+  (await waitFor('.author-preferences-form button[type="submit"]')).click();
+  await waitFor('.author-preference-item');
+  const storedPreferences = JSON.parse(localStorage.getItem('inkhub-author-preferences-v1') || '[]');
+  if (!storedPreferences.some((item) => item.enabled && item.label === '验收表达习惯' && item.scopes.length)) throw new Error('Author preference was not persisted with its scope.');
+  const disablePreference = Array.from(preferencesDialog.querySelectorAll('button')).find((button) => button.textContent === '停用');
+  disablePreference.click(); await sleep(80);
+  if (JSON.parse(localStorage.getItem('inkhub-author-preferences-v1'))[0].enabled) throw new Error('Author preference disable did not persist.');
+  Array.from(preferencesDialog.querySelectorAll('button')).find((button) => button.textContent === '启用').click(); await sleep(80);
+  await captureCheckpoint('12-author-preferences');
+  (await waitFor('[aria-label="关闭作者偏好"]')).click();
+  await sleep(80);
+  visited.push('author-preferences');
+
   await clickTab('Skills', '.skill-layout');
   const earlySkillStatusNode = await waitFor('.capability-status span');
   const earlySkillStarted = Date.now();
@@ -94,6 +209,14 @@ const acceptanceScript = String.raw`
   const storyState = await window.deepwrite.inkHub.reconstructStoryState({ entryId: fixtureEntry.id, confirmBillable: true });
   const storyStateReady = storyState.summary.status === 'ready' && storyState.summary.analyzedChapters === 3 && storyState.summary.factCount === 3;
   if (!storyStateReady) throw new Error('Structured story state is incomplete: ' + JSON.stringify(storyState.summary));
+  await clickTab('作品体检', '.novel-health-panel');
+  (await waitFor('.health-check')).click();
+  await waitFor('.health-index[data-status="current"]');
+  await waitFor('.health-facts[data-status="current"]');
+  await waitFor('.health-summaries[data-status="current"]');
+  await captureCheckpoint('13-novel-health');
+  visited.push('novel-health');
+  await clickTab('小说库', '.novel-layout');
   const continuation = await window.deepwrite.inkHub.generateStoryContinuation({ entryId: fixtureEntry.id, authorIntent: '承接上一章继续写', currentFocus: '林舟', targetCharacters: 1000, confirmBillable: true });
   const continuationReady = continuation.canonical === false && continuation.writebackPerformed === false && continuation.draft.length > 0;
   if (!continuationReady) throw new Error('In-app continuation did not remain a non-writeback draft.');
@@ -269,6 +392,70 @@ const acceptanceScript = String.raw`
   }
   await captureCheckpoint('08-model-settings-1440x900');
 
+  await clickSelector('[data-nav-id="inkhub-library"]', '.inkhub-library');
+  const moreForTopic = await waitFor('[data-nav-id="more"]');
+  if (moreForTopic.getAttribute('aria-expanded') !== 'true') moreForTopic.click();
+  (await waitFor('[data-feature-id="topic-archive"]')).click();
+  await waitFor('.topic-archive-record-header');
+  (await waitFor('[data-topic-create-book]')).click();
+  const seededTitle = await waitFor('.create-short-book-form input[type="text"]');
+  if (seededTitle.value !== '验收用选题档案') throw new Error('Topic title did not prefill book creation.');
+  const longTab = Array.from(document.querySelectorAll('.create-workspace-type-tab')).find((button) => (button.textContent || '').includes('长篇'));
+  if (!longTab) throw new Error('Missing long-novel creation route.');
+  longTab.click();
+  const longTitle = await waitFor('input[placeholder="请输入长篇书名"]');
+  longTitle.value = '结构报告验收作品';
+  longTitle.dispatchEvent(new Event('input', { bubbles: true }));
+  const createLongButton = await waitFor('.create-short-book-form button[type="submit"]');
+  createLongButton.click();
+  const longMenu = await waitFor('[aria-label="结构报告验收作品更多操作"]');
+  const topicLinkStarted = Date.now();
+  while (Date.now() - topicLinkStarted < 3000 && !JSON.parse(localStorage.getItem('inkhub-topic-archive-v1') || '[]')[0]?.bookLink) await sleep(60);
+  const linkedTopic = JSON.parse(localStorage.getItem('inkhub-topic-archive-v1') || '[]')[0];
+  if (linkedTopic?.bookLink?.workspaceType !== 'long' || linkedTopic.bookLink.title !== '结构报告验收作品') throw new Error('Created book was not linked back to the topic.');
+  (await waitFor('[data-feature-id="topic-archive"]')).click();
+  const unsavedEvidence = await waitFor('.topic-archive-evidence-form textarea');
+  unsavedEvidence.value = '尚未保存的选题证据';
+  unsavedEvidence.dispatchEvent(new Event('input', { bubbles: true }));
+  await sleep(60);
+  const originalConfirm = window.confirm;
+  let discardAsked = false;
+  window.confirm = () => { discardAsked = true; return false; };
+  try { (await waitFor('[data-topic-open-book]')).click(); } finally { window.confirm = originalConfirm; }
+  await sleep(60);
+  if (!discardAsked || !document.querySelector('.topic-archive-dialog') || unsavedEvidence.value !== '尚未保存的选题证据') throw new Error('Opening topic planning silently discarded unsaved evidence.');
+  unsavedEvidence.value = '';
+  unsavedEvidence.dispatchEvent(new Event('input', { bubbles: true }));
+  await sleep(60);
+  (await waitFor('[data-topic-open-book]')).click();
+  const planningStarted = Date.now();
+  while (document.querySelector('.topic-archive-dialog') && Date.now() - planningStarted < 15000) await sleep(60);
+  if (document.querySelector('.topic-archive-dialog')) throw new Error('Associated book planning did not open from its topic.');
+  visited.push('topic-book');
+  (await waitFor('[aria-label="结构报告验收作品更多操作"]')).click();
+  await waitForVisible('.tree-node-action-menu');
+  const manageStructure = Array.from(document.querySelectorAll('[role="menuitem"]')).find((button) => (button.textContent || '').includes('结构管理'));
+  if (!manageStructure) throw new Error('Missing long-novel structure management route.');
+  manageStructure.click();
+  const outlinePanel = await waitFor('.outline-completeness');
+  const outlineDetails = outlinePanel.querySelector('details');
+  outlineDetails.querySelector('summary').click();
+  await sleep(100);
+  if (!outlineDetails.open || !outlinePanel.querySelector('[data-severity="action"]') || !outlinePanel.textContent.includes('人工确认')) {
+    throw new Error('New-book outline report did not show actionable missing layers: ' + outlinePanel.textContent);
+  }
+  if (outlinePanel.scrollWidth > outlinePanel.clientWidth + 1) throw new Error('Outline report overflows its container.');
+  (await waitFor('[data-action="inspect-outline-content"]')).click();
+  const contentDetails = await waitFor('.outline-content-results');
+  contentDetails.querySelector('summary').click(); await sleep(80);
+  const contentReport = await waitFor('.outline-content-report');
+  if (!contentReport.textContent.includes('已检查 2 / 2') || contentReport.querySelectorAll('[data-content-status="empty"]').length !== 2) throw new Error('New-book mainline and chapter content inspection failed: ' + contentReport.textContent);
+  visited.push('outline-content');
+  await captureCheckpoint('11-outline-report-1440x900');
+  (await waitFor('[aria-label="关闭结构管理"]')).click();
+  await sleep(100);
+  visited.push('outline-report');
+
   await clickSelector('[data-nav-id="agent-teams"]', '.agent-team-settings');
   visited.push('agent-teams');
   await clickSelector('[aria-label="打开设置"]', '.settings-page');
@@ -293,6 +480,7 @@ const acceptanceScript = String.raw`
     ).join(',');
     throw new Error('Found unnamed interactive controls: ' + unnamedControls + ' (' + details + ')');
   }
+
   if (document.documentElement.scrollWidth > document.documentElement.clientWidth) {
     throw new Error('The application has horizontal document overflow.');
   }
@@ -307,7 +495,14 @@ const acceptanceScript = String.raw`
       scroll: document.documentElement.scrollWidth
     },
     unnamedControls,
-    reader: { chapters: chapterButtons.length, volumeGroups, repairReady, aiRepairReady, aiRepairSelectionReady, deepQualityReady, storyStateReady, continuationReady, forecastReady, searchResults, qualityCoverage }
+    reader: { chapters: chapterButtons.length, volumeGroups, repairReady, aiRepairReady, aiRepairSelectionReady, deepQualityReady, storyStateReady, continuationReady, forecastReady, searchResults, qualityCoverage },
+    writingGuideReady: true,
+    topicArchiveReady: true,
+    outlineReportReady: true,
+    topicBookReady: true,
+    authorPreferencesReady: true,
+    novelHealthReady: true,
+    outlineContentReady: true
   };
 })()
 `;
@@ -327,20 +522,28 @@ export async function runInkHubRendererAcceptance(
   }
 
   const execution = window.webContents.executeJavaScript(acceptanceScript, true) as Promise<unknown>;
+  let rendererFailure: unknown;
+  void execution.catch((error: unknown) => { rendererFailure = error; });
   if (screenshotDirectory) {
     const checkpoints = [
+      "09-writing-guide-1440x900",
+      "10-topic-archive-1440x900",
+      "12-author-preferences",
       "01-library-1440x900",
+      "13-novel-health",
       "02-volume-reader-1440x900",
       "03-fulltext-index-1440x900",
       "04-quality-repair-1440x900",
       "05-skills-1440x900",
       "06-agents-1440x900",
       "07-cover-illustration-1440x900",
-      "08-model-settings-1440x900"
+      "08-model-settings-1440x900",
+      "11-outline-report-1440x900"
     ];
     for (const checkpoint of checkpoints) {
       const startedAt = Date.now();
       while (Date.now() - startedAt < 30_000) {
+        if (rendererFailure) throw rendererFailure;
         const current = await window.webContents.executeJavaScript(
           "window.__INKHUB_CAPTURE_SCREENSHOTS_STEP__ || ''",
           true
@@ -372,7 +575,7 @@ export async function runInkHubRendererAcceptance(
   if (
     result.title !== "墨枢" ||
     !Array.isArray(result.visited) ||
-    result.visited.length !== 12 ||
+    result.visited.length !== 19 ||
     typeof result.skillStatus !== "string" ||
     result.unnamedControls !== 0 ||
     !result.reader ||
@@ -385,6 +588,10 @@ export async function runInkHubRendererAcceptance(
     !result.reader.storyStateReady ||
     !result.reader.continuationReady ||
     !result.reader.forecastReady ||
+    result.writingGuideReady !== true ||
+    result.topicArchiveReady !== true ||
+    result.outlineReportReady !== true ||
+    result.topicBookReady !== true || result.authorPreferencesReady !== true || result.novelHealthReady !== true || result.outlineContentReady !== true ||
     result.reader.searchResults < 3 ||
     !result.reader.qualityCoverage.includes("3/3")
   ) {

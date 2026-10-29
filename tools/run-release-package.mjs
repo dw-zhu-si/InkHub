@@ -89,7 +89,10 @@ async function main() {
         const runtime = await ensureElectronRuntime();
         console.log(`RELEASE_RUNTIME_OK version=${runtime.version}`);
       },
-      verify: () => run("pnpm", ["verify"]),
+      verify: async () => {
+        await run("pnpm", ["audit"]);
+        await run("pnpm", ["verify"]);
+      },
       build: () => run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.release.yml",
         `--config.electronVersion=${electronPackage.version}`, `--config.directories.output=${output}`,
         `--config.mac.identity=${signing.qualifier}`,

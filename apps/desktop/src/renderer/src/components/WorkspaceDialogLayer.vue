@@ -38,6 +38,7 @@ import type {
 
 defineProps<{
   module: WorkspaceDialogModule | null;
+  topicSeed?: { title: string; genre: string; promise: string; conflict: string; audience: string } | undefined;
 }>();
 
 const emit = defineEmits<WorkspaceDialogLayerEmits>();
@@ -127,6 +128,7 @@ const emit = defineEmits<WorkspaceDialogLayerEmits>();
       :loading="module.loading"
       :submitting="module.submitting"
       @close="emit('closeCreateBook')"
+      :topic-seed="topicSeed"
       @submit="emit('submitCreateBook', $event)"
     />
 

@@ -49,6 +49,9 @@ const emit = defineEmits<{
   openAgentTeams: [];
   openMarketplace: [];
   openCloudBackup: [];
+  openWritingGuide: [];
+  openTopicArchive: [];
+  openAuthorPreferences: [];
   openSettings: [];
   selectResource: [node: ResourceTreeNode];
   bookAction: [mode: BookResourceDialogMode, node: ResourceTreeNode];
@@ -266,20 +269,32 @@ const resourceDomainsByNodeId = computed(
     )
 );
 const moreFeatures: Array<{
-  id: "imitation" | "runtime";
+  id: "imitation" | "runtime" | "writing-guide" | "topic-archive" | "author-preferences";
   label: string;
   description: string;
   icon: IconName;
 }> = [
+  { id: "writing-guide", label: "创作上手", description: "按短篇、剧本或长篇查看可跳过、可恢复的创作流程", icon: "book" },
+  { id: "topic-archive", label: "选题档案", description: "保存灵感、读者承诺与可追溯证据", icon: "library" },
+  { id: "author-preferences", label: "作者偏好", description: "管理跨作品的表达、节奏和文风偏好", icon: "book" },
   { id: "imitation", label: "短篇学习仿写", description: "学习范文并生成同类短篇", icon: "wand" },
   { id: "runtime", label: "运行设置", description: "智能体与工具边界", icon: "model" }
 ];
 
 function activateMoreFeature(
-  id: "imitation" | "runtime"
+  id: "imitation" | "runtime" | "writing-guide" | "topic-archive" | "author-preferences"
 ): void {
+  if (id === "writing-guide") {
+    emit("openWritingGuide");
+    return;
+  }
+  if (id === "author-preferences") { emit("openAuthorPreferences"); return; }
   if (id === "imitation") {
     emit("openDialog", "imitation");
+    return;
+  }
+  if (id === "topic-archive") {
+    emit("openTopicArchive");
     return;
   }
   openSettings();

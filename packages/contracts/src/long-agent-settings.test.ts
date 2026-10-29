@@ -96,10 +96,26 @@ describe("long agent settings contracts", () => {
 
   it("requires each of the four long agent ids exactly once", () => {
     const input = editableDefaults();
-    input.agents[4] = structuredClone(input.agents[0]!);
+    input.agents[3] = structuredClone(input.agents[0]!);
     expect(() => LongAgentSettingsInputSchema.parse(input)).toThrow(
-      /Duplicate|Missing/
+      /Duplicate/
     );
+    expect(() => LongAgentSettingsInputSchema.parse(input)).toThrow(/Missing/);
+  });
+
+  it("enforces four profiles and fails fast for an oversized list", () => {
+    for (const count of [3, 5]) {
+      const input = editableDefaults();
+      input.agents = Array.from({ length: count }, () => structuredClone(input.agents[0]!));
+      const result = LongAgentSettingsInputSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues).toEqual(expect.arrayContaining([expect.objectContaining({
+          code: count > 4 ? "too_big" : "too_small", path: ["agents"]
+        })]));
+        if (count > 4) expect(result.error.issues).toHaveLength(1);
+      }
+    }
   });
 
   it("validates independent long agent list, save and reset commands", () => {

@@ -5,6 +5,7 @@ import type {
 } from "@deepwrite/contracts";
 import {
   canApproveLongWritingProposal,
+  type LongWritingWorkflowStorage,
   useLongWritingOrchestrator
 } from "./useLongWritingOrchestrator";
 
@@ -64,7 +65,16 @@ function ledgerProposal() {
   } as SystemEventEnvelope;
 }
 
-function harness() {
+function memoryStorage(): LongWritingWorkflowStorage {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key)
+  };
+}
+
+function harness(storage = memoryStorage()) {
   const live = new Map<string, LongChapterReadiness>([
     ["chapter_one", readiness("chapter_one", "empty")],
     ["chapter_two", readiness("chapter_two", "empty")]
@@ -86,6 +96,7 @@ function harness() {
     startWriter,
     startLedger,
     saveBarrier,
+    storage,
     notifications
   });
   return {
@@ -155,6 +166,42 @@ describe("useLongWritingOrchestrator", () => {
     await test.controller.retry();
     expect(test.controller.state.value.currentIndex).toBe(1);
     expect(test.startLedger).not.toHaveBeenCalled();
+  });
+
+  it("restores a persisted plan paused and resumes only after explicit recheck", async () => {
+    const storage = memoryStorage();
+    const first = harness(storage);
+    await first.controller.startDispatch(dispatchEvent());
+    expect(first.startWriter).toHaveBeenCalledOnce();
+
+    const resumed = harness(storage);
+    expect(resumed.controller.state.value).toMatchObject({
+      bookId: "longbook_test",
+      currentIndex: 0,
+      phase: "paused"
+    });
+    expect(resumed.startWriter).not.toHaveBeenCalled();
+
+    await resumed.controller.retry();
+    expect(resumed.startWriter).toHaveBeenCalledOnce();
+    expect(resumed.controller.state.value.phase).toBe(
+      "awaiting_writer_approval"
+    );
+  });
+
+  it("removes a saved checkpoint only when the author cancels the plan", async () => {
+    const storage = memoryStorage();
+    const test = harness(storage);
+    await test.controller.startDispatch(dispatchEvent());
+    expect(
+      storage.getItem("inkhub.long-writing-workflow.v1.plan")
+    ).not.toBeNull();
+
+    test.controller.cancel();
+    expect(storage.getItem("inkhub.long-writing-workflow.v1.plan")).toBeNull();
+    expect(
+      storage.getItem("inkhub.long-writing-workflow.v1.progress")
+    ).toBeNull();
   });
 
   it("ignores continuity events because records are outside writing plans", async () => {

@@ -22,6 +22,7 @@ export type LongWritingWorkflowPhase =
   | "checking"
   | "awaiting_writer_approval"
   | "saving"
+  | "paused"
   | "error"
   | "complete";
 
@@ -87,6 +88,7 @@ interface LongWritingWorkflowNotifications {
   success(message: string): void;
   info(message: string): void;
   error(message: string): void;
+  warning?(message: string): void;
 }
 
 export interface LongWritingRunGuard {
@@ -111,6 +113,13 @@ export interface UseLongWritingOrchestratorOptions {
   ): Promise<void>;
   saveBarrier(bookId: string): Promise<boolean>;
   notifications: LongWritingWorkflowNotifications;
+  storage?: LongWritingWorkflowStorage;
+}
+
+export interface LongWritingWorkflowStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
 }
 
 export interface LongWritingOrchestrator {
@@ -133,6 +142,7 @@ export interface LongWritingOrchestrator {
   ): boolean;
   retry(): Promise<void>;
   cancel(): void;
+  suspend(): void;
 }
 
 const EMPTY_STATE: LongWritingWorkflowState = {
@@ -145,6 +155,81 @@ const EMPTY_STATE: LongWritingWorkflowState = {
   retryPoint: null
 };
 
+const CHECKPOINT_PLAN_KEY = "inkhub.long-writing-workflow.v1.plan";
+const CHECKPOINT_PROGRESS_KEY = "inkhub.long-writing-workflow.v1.progress";
+
+function defaultStorage(): LongWritingWorkflowStorage | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+function loadCheckpoint(
+  storage: LongWritingWorkflowStorage | undefined
+): LongWritingWorkflowState {
+  if (!storage) return { ...EMPTY_STATE };
+  try {
+    const rawPlan = storage.getItem(CHECKPOINT_PLAN_KEY);
+    const rawProgress = storage.getItem(CHECKPOINT_PROGRESS_KEY);
+    if (!rawPlan || !rawProgress) {
+      clearCheckpoint(storage);
+      return { ...EMPTY_STATE };
+    }
+    const value = JSON.parse(rawPlan) as {
+      bookId?: unknown;
+      scope?: unknown;
+      chapters?: unknown;
+    };
+    const progress = JSON.parse(rawProgress) as { currentIndex?: unknown };
+    if (
+      typeof value.bookId !== "string" ||
+      (value.scope !== "chapter" && value.scope !== "arc" && value.scope !== "volume") ||
+      !Array.isArray(value.chapters) ||
+      value.chapters.length === 0 ||
+      !value.chapters.every(
+        (chapter) =>
+          chapter &&
+          typeof chapter.chapterCardId === "string" &&
+          typeof chapter.title === "string"
+      ) ||
+      !Number.isInteger(progress.currentIndex) ||
+      (progress.currentIndex as number) < 0 ||
+      (progress.currentIndex as number) >= value.chapters.length
+    ) {
+      clearCheckpoint(storage);
+      return { ...EMPTY_STATE };
+    }
+    return {
+      bookId: value.bookId,
+      scope: value.scope,
+      chapters: value.chapters.map((chapter) => ({
+        chapterCardId: chapter.chapterCardId,
+        title: chapter.title,
+        status: "empty" as const,
+        missingFiles: []
+      })),
+      currentIndex: progress.currentIndex as number,
+      phase: "paused",
+      error: "检测到上次未完成的写作计划，已暂停。点击“恢复并复核当前章”后，墨枢会重新核对章节，不会自动调用模型。",
+      retryPoint: "check"
+    };
+  } catch {
+    clearCheckpoint(storage);
+    return { ...EMPTY_STATE };
+  }
+}
+
+function clearCheckpoint(storage: LongWritingWorkflowStorage): void {
+  try {
+    storage.removeItem(CHECKPOINT_PLAN_KEY);
+    storage.removeItem(CHECKPOINT_PROGRESS_KEY);
+  } catch {
+    // Storage can be unavailable in restricted or full profiles.
+  }
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -152,8 +237,10 @@ function errorMessage(error: unknown, fallback: string): string {
 export function useLongWritingOrchestrator(
   options: UseLongWritingOrchestratorOptions
 ): LongWritingOrchestrator {
-  const state = ref<LongWritingWorkflowState>({ ...EMPTY_STATE });
+  const storage = options.storage ?? defaultStorage();
+  const state = ref<LongWritingWorkflowState>(loadCheckpoint(storage));
   let epoch = 0;
+  let storedPlanBookId = state.value.bookId;
 
   const currentChapter = computed(
     () => state.value.chapters[state.value.currentIndex] ?? null
@@ -166,6 +253,44 @@ export function useLongWritingOrchestrator(
 
   function patch(values: Partial<LongWritingWorkflowState>): void {
     state.value = { ...state.value, ...values };
+    persistCheckpoint();
+  }
+
+  function persistCheckpoint(): void {
+    if (!storage) return;
+    try {
+      if (
+        !state.value.bookId ||
+        !state.value.scope ||
+        state.value.phase === "idle" ||
+        state.value.phase === "complete"
+      ) {
+        clearCheckpoint(storage);
+        storedPlanBookId = null;
+        return;
+      }
+      if (storedPlanBookId !== state.value.bookId) {
+        storage.setItem(
+          CHECKPOINT_PLAN_KEY,
+          JSON.stringify({
+            bookId: state.value.bookId,
+            scope: state.value.scope,
+            chapters: state.value.chapters.map(
+              ({ chapterCardId, title }) => ({ chapterCardId, title })
+            )
+          })
+        );
+        storedPlanBookId = state.value.bookId;
+      }
+      storage.setItem(
+        CHECKPOINT_PROGRESS_KEY,
+        JSON.stringify({ currentIndex: state.value.currentIndex })
+      );
+    } catch {
+      options.notifications.warning?.(
+        "写作计划检查点未能保存到本机；当前窗口内计划仍可继续。重启后可能无法恢复。"
+      );
+    }
   }
 
   function fail(error: unknown, retryPoint: RetryPoint): void {
@@ -296,6 +421,7 @@ export function useLongWritingOrchestrator(
       error: null,
       retryPoint: null
     };
+    persistCheckpoint();
     options.notifications.info(
       `已启动 ${event.payload.chapters.length} 章串行写作计划。`
     );
@@ -360,7 +486,7 @@ export function useLongWritingOrchestrator(
 
   async function retry(): Promise<void> {
     if (
-      state.value.phase !== "error" ||
+      (state.value.phase !== "error" && state.value.phase !== "paused") ||
       state.value.retryPoint === null
     ) {
       return;
@@ -403,6 +529,20 @@ export function useLongWritingOrchestrator(
   function cancel(): void {
     epoch += 1;
     state.value = { ...EMPTY_STATE };
+    persistCheckpoint();
+  }
+
+  function suspend(): void {
+    epoch += 1;
+    if (state.value.bookId && state.value.phase !== "complete") {
+      state.value = {
+        ...state.value,
+        phase: "paused",
+        error: "写作计划已暂停。点击“恢复并复核当前章”后才会继续；不会自动调用模型。",
+        retryPoint: "check"
+      };
+      persistCheckpoint();
+    }
   }
 
   return {
@@ -416,6 +556,7 @@ export function useLongWritingOrchestrator(
     handleRejected,
     handleRunFailure,
     retry,
-    cancel
+    cancel,
+    suspend
   };
 }

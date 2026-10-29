@@ -396,6 +396,65 @@ function handleEditorKeydown(event: KeyboardEvent): void {
   const modifier = event.metaKey || event.ctrlKey;
   const key = event.key.toLowerCase();
 
+  if (
+    modifier &&
+    !event.altKey &&
+    !event.isComposing &&
+    !editorReadOnly.value &&
+    (key === "b" || key === "i" || key === "u")
+  ) {
+    event.preventDefault();
+    const input = editorInput.value;
+    if (!input) return;
+
+    const selectionStart = input.selectionStart ?? 0;
+    const selectionEnd = input.selectionEnd ?? selectionStart;
+    const selectedText = content.value.slice(selectionStart, selectionEnd);
+    const [prefix, suffix] =
+      key === "b"
+        ? ["**", "**"]
+        : key === "i"
+          ? ["*", "*"]
+          : ["<u>", "</u>"];
+    const nextContent =
+      content.value.slice(0, selectionStart) +
+      prefix +
+      selectedText +
+      suffix +
+      content.value.slice(selectionEnd);
+    if (
+      contentMaxLength.value !== undefined &&
+      nextContent.length > contentMaxLength.value
+    ) {
+      uiMessage.warning(
+        isLibraryOverview.value
+          ? "素材库或技能库介绍最多 40,000 字，请精简内容后再编辑"
+          : "每个素材库或技能库条目最多 40,000 字，请精简内容后再编辑"
+      );
+      return;
+    }
+    const selectionAfter = selectedText
+      ? {
+          start: selectionStart + prefix.length,
+          end: selectionStart + prefix.length + selectedText.length
+        }
+      : {
+          start: selectionStart + prefix.length,
+          end: selectionStart + prefix.length
+        };
+    const nonWhitespaceDelta = recordProgrammaticChange(
+      nextContent,
+      selectionAfter
+    );
+    if (!updateContent(nextContent, nonWhitespaceDelta)) return;
+
+    void nextTick(() => {
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(selectionAfter.start, selectionAfter.end);
+    });
+    return;
+  }
+
   if (modifier && key === "z") {
     event.preventDefault();
     if (event.shiftKey) redo();

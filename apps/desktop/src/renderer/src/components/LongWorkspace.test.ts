@@ -42,6 +42,7 @@ import longWorkspaceStoreSource from "../stores/longWorkspaceStore.ts?raw";
 import agentRunPreferencesSource from "../utils/agentRunPreferences.ts?raw";
 import longWorkspaceResourceTreeSource from "../utils/longWorkspaceResourceTree.ts?raw";
 import writingWorkspaceSource from "./WritingWorkspaceModule.vue?raw";
+import topicBookWorkflowSource from "../utils/topicBookWorkflow.ts?raw";
 
 describe("long-form renderer vertical slice", () => {
   it("keeps create-book loading feedback inside the stable action footer", () => {
@@ -737,9 +738,12 @@ describe("long-form renderer vertical slice", () => {
     expect(workspaceDialogLayerSource).toContain("<CreateBookDialog");
     expect(appSource).toContain('@submit-create-book="createCreativeBook"');
     expect(appSource).toContain("async function createCreativeBook(");
-    expect(appSource).toContain(
-      "await shortBookLifecycle.createBook(input)"
-    );
+    expect(appSource).toContain("await createTopicBook(input");
+    expect(appSource).toContain("createLong: createLongBook");
+    expect(appSource).toContain("createShort: (value) => shortBookLifecycle.createBook(value)");
+    expect(topicBookWorkflowSource).toContain('if (input.workspaceType === "long")');
+    expect(topicBookWorkflowSource).toContain("await options.createLong(payload)");
+    expect(topicBookWorkflowSource).toContain("else await options.createShort(input)");
     expect(workspaceTypeSource).toContain(
       'workspaceType?: "short" | "script" | "long";'
     );

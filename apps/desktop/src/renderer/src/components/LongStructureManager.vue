@@ -1325,14 +1325,14 @@ button:disabled {
 
 .primary-button {
   border-color: var(--neutral-solid);
-  color: var(--accent-contrast);
+  color: var(--surface-main);
   background: var(--neutral-solid);
   font-weight: 650;
 }
 
 .primary-button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--neutral-solid) 86%, var(--text-primary));
-  color: var(--accent-contrast);
+  color: var(--surface-main);
   background: color-mix(in srgb, var(--neutral-solid) 86%, var(--text-primary));
 }
 

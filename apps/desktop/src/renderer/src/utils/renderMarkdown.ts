@@ -18,7 +18,9 @@ function renderInline(value: string): string {
   let rendered = escapeHtml(tokenized)
     .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
     .replace(/__([^_\n]+)__/g, "<strong>$1</strong>")
+    .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>")
     .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
+    .replace(/&lt;u&gt;([^\n]*?)&lt;\/u&gt;/g, "<u>$1</u>")
     .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label: string, url: string) => {
       return `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
     });

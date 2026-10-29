@@ -45,7 +45,10 @@ import { systemEventCenter } from "./events/systemEventCenter";
 import {
   LongWorkspaceModule,
   WorkspaceDialogLayer,
-  WorkspaceFeatureModules
+  WorkspaceFeatureModules,
+  WritingGettingStartedDialog,
+  TopicArchiveDialog,
+  AuthorPreferencesDialog
 } from "./components/lazyAppComponents";
 import {
   useAgentConversation,
@@ -89,6 +92,7 @@ import { useWorkspaceResourceTreeCoordinator } from "./composables/useWorkspaceR
 import { useWorkspaceDialogModuleCoordinator } from "./composables/useWorkspaceDialogModuleCoordinator";
 import { useWorkspaceFeatureHostCoordinator } from "./composables/useWorkspaceFeatureHostCoordinator";
 import { uiMessage } from "./ui-feedback";
+import type { TopicRecord } from "./utils/topicArchiveStorage";
 import { resourceSections } from "./data/demoWorkspace";
 import {
   MATERIAL_STAGE_LABELS,
@@ -383,6 +387,14 @@ const {
 });
 const catalogMutationPending = ref(false);
 const createBookDialogOpen = ref(false);
+const writingGuideOpen = ref(false);
+const topicArchiveOpen = ref(false);
+const authorPreferencesOpen = ref(false);
+const topicBookSeed = shallowRef<TopicRecord>();
+const topicBookOptions = computed(() => [
+  ...(catalogSnapshot.value?.books ?? []).map((book) => ({ bookId: book.id, title: book.title, workspaceType: book.bookType as "short" | "script" })),
+  ...longBooks.value.map((book) => ({ bookId: book.id, title: book.title, workspaceType: "long" as const }))
+]);
 const bookTransferDialogMode = ref<BookTransferDialogMode | null>(null);
 const longWorkspaceStore = useLongWorkspaceStore();
 const {
@@ -1778,6 +1790,7 @@ function disposeLibraryConversation(
 function closeCreateBookDialog(): void {
   if (catalogMutationPending.value || longMutationPending.value) return;
   createBookDialogOpen.value = false;
+  topicBookSeed.value = undefined;
 }
 
 function openCreateBookDialog(): void {
@@ -1787,22 +1800,26 @@ function openCreateBookDialog(): void {
   }
   createBookDialogOpen.value = true;
 }
-
-async function createCreativeBook(
-  input: CreateCreativeBookPayload
-): Promise<void> {
-  if (input.workspaceType === "long") {
-    await createLongBook({
-      title: input.title,
-      genre: input.genre,
-      linkedMaterialIdsByKind: input.linkedMaterialIdsByKind,
-      linkedSkillIdsByKind: input.linkedSkillIdsByKind
-    });
-    return;
-  }
-  await shortBookLifecycle.createBook(input);
+function navigateFromWritingGuide(destination: "create-book" | "library" | "conversation"): void {
+  ({ "create-book": openCreateBookDialog, library: () => layoutStore.showWorkspaceFeature("inkhub-library"), conversation: showConversation })[destination]();
 }
-
+async function createCreativeBook(input: CreateCreativeBookPayload): Promise<void> {
+  const { createTopicBook } = await import("./utils/topicBookWorkflow");
+  if (await createTopicBook(input, { topic: topicBookSeed.value, storage: localStorage, books: () => topicBookOptions.value,
+    dialogOpen: () => createBookDialogOpen.value, createLong: createLongBook, createShort: (value) => shortBookLifecycle.createBook(value), notify: uiMessage })) topicBookSeed.value = undefined;
+}
+function createBookFromTopic(topic: TopicRecord): void { topicBookSeed.value = topic; topicArchiveOpen.value = false; openCreateBookDialog(); }
+async function openTopicBook(book: NonNullable<TopicRecord["bookLink"]>): Promise<void> {
+  const { openTopicBookTarget } = await import("./utils/topicBookWorkflow");
+  const opened = await openTopicBookTarget(book, { books: topicBookOptions.value, openLong: openLongBook, loadedLong: () => activeLongWorkspaceIndex.value?.bookId ?? null,
+    missing: () => uiMessage.warning("关联作品未在当前书库中找到，请刷新列表或重新关联。"), openShort: async (bookId) => {
+    const id = resolvePreferredBookResourceId(catalogProjection.value ?? undefined, bookId);
+    const node = id ? findResourceNodeIn(resourceTreeSections.value, id) : undefined;
+    if (!node) return false;
+    await selectResource(node); return resolveBookWorkspaceId(catalogProjection.value ?? undefined, selectedResourceId.value) === bookId;
+  } });
+  if (opened) { topicArchiveOpen.value = false; showConversation(); }
+}
 async function handleResourceAction(payload: ResourceSectionActionPayload): Promise<void> {
   if (
     payload.domain === "creation" &&
@@ -2531,6 +2548,9 @@ onBeforeUnmount(() => {
       @open-agent-teams="openAgentTeams"
       @open-marketplace="openMarketplace"
       @open-cloud-backup="openCloudBackup"
+      @open-writing-guide="writingGuideOpen = true"
+      @open-topic-archive="topicArchiveOpen = true"
+      @open-author-preferences="authorPreferencesOpen = true"
       @open-settings="openSettings"
       @select-resource="selectResource"
       @book-action="openBookDialog"
@@ -2685,9 +2705,26 @@ onBeforeUnmount(() => {
 
   </div>
 
+  <WritingGettingStartedDialog
+    :open="writingGuideOpen"
+    @close="writingGuideOpen = false"
+    @navigate="navigateFromWritingGuide"
+  />
+
+  <AuthorPreferencesDialog :open="authorPreferencesOpen" @close="authorPreferencesOpen = false" />
+
+  <TopicArchiveDialog
+    :open="topicArchiveOpen"
+    :book-options="topicBookOptions"
+    @close="topicArchiveOpen = false"
+    @create-book="createBookFromTopic"
+    @open-book="openTopicBook"
+  />
+
   <WorkspaceDialogLayer
     v-if="workspaceDialogModule"
     :module="workspaceDialogModule"
+    :topic-seed="topicBookSeed"
     @close-book-resource="closeBookDialog"
     @rename-book="renameBook"
     @remove-book="removeBook"

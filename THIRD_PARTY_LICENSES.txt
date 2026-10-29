@@ -1,7 +1,7 @@
 墨枢（InkHub）第三方许可证与版权声明
 
-应用版本：0.3.2
-pnpm-lock.yaml SHA-256：ffbd40bdde8491cd0f84fcb4f79b5b682cd1002c42d8709af7556977141332c5
+应用版本：0.3.3
+pnpm-lock.yaml SHA-256：843369f58903c3057ddff0b183ce4d356e09c5f02e4108e93f58af1105e0a6dd
 生成命令：node tools/generate-third-party-licenses.mjs
 只读复验：node tools/generate-third-party-licenses.mjs --check
 
@@ -10,7 +10,7 @@ pnpm-lock.yaml SHA-256：ffbd40bdde8491cd0f84fcb4f79b5b682cd1002c42d8709af755697
 工作区自身代码及上游基础许可另见随包 LICENSE、NOTICE、UPSTREAM.md 和 THIRD_PARTY_NOTICES.md。
 本文件不包含用户小说、模型凭据、本机路径或安装环境配置。
 
-许可记录：175（含 Electron 44.0.0）
+许可记录：175（含 Electron 44.10.0）
 声明型证据：lazy-val@1.0.5、vdirs@0.1.8
 声明型证据保留包的明确 SPDX 许可声明及实际作者元数据，并附官方标准条款；
 它与上游附带的 LICENSE 原文是不同的证据类型，不补写版权年份，也不代表法律保证。
@@ -18,7 +18,7 @@ pnpm-lock.yaml SHA-256：ffbd40bdde8491cd0f84fcb4f79b5b682cd1002c42d8709af755697
 未安装、未纳入的可选平台包：@napi-rs/canvas-android-arm64@1.0.2、@napi-rs/canvas-darwin-x64@1.0.2、@napi-rs/canvas-linux-arm-gnueabihf@1.0.2、@napi-rs/canvas-linux-arm64-gnu@1.0.2、@napi-rs/canvas-linux-arm64-musl@1.0.2、@napi-rs/canvas-linux-riscv64-gnu@1.0.2、@napi-rs/canvas-linux-x64-gnu@1.0.2、@napi-rs/canvas-linux-x64-musl@1.0.2、@napi-rs/canvas-win32-arm64-msvc@1.0.2、@napi-rs/canvas-win32-x64-msvc@1.0.2
 
 Electron/Chromium/Node.js 等嵌入组件的第三方声明另见随包原文 LICENSES.chromium.html。
-LICENSES.chromium.html SHA-256：4cbde8e3e7b29f451c78a44491fb32e2202884826fef47786a9cda5a36110525
+LICENSES.chromium.html SHA-256：3375e2a9bd7bc631738fde10be6548a76efe8cf5e4b8826b8140ba8b0c4d6353
 Electron 自身许可另以 LICENSE.electron.txt 保留；不得省略这两份伴随文件。
 
 ==============================================================================
@@ -9286,7 +9286,7 @@ Apache License
     SOFTWARE
 
 ==============================================================================
-@vue/compiler-core@3.5.39
+@vue/compiler-core@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -9316,7 +9316,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-@vue/compiler-dom@3.5.39
+@vue/compiler-dom@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -9346,7 +9346,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-@vue/compiler-sfc@3.5.39
+@vue/compiler-sfc@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -9376,7 +9376,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-@vue/compiler-ssr@3.5.39
+@vue/compiler-ssr@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -9496,7 +9496,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-@vue/reactivity@3.5.39
+@vue/reactivity@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -9526,7 +9526,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-@vue/runtime-core@3.5.39
+@vue/runtime-core@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -9556,7 +9556,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-@vue/runtime-dom@3.5.39
+@vue/runtime-dom@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -9586,7 +9586,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-@vue/server-renderer@3.5.39
+@vue/server-renderer@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -9616,7 +9616,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-@vue/shared@3.5.39
+@vue/shared@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -10671,7 +10671,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-electron@44.0.0
+electron@44.10.0
 声明许可证：MIT
 证据类型：installed-runtime-notice
 
@@ -14302,7 +14302,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
 IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ==============================================================================
-source-map-js@1.2.1
+source-map-js@1.2.2
 声明许可证：BSD-3-Clause
 证据类型：installed-notice
 
@@ -14949,7 +14949,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-vue@3.5.39
+vue@3.5.42
 声明许可证：MIT
 证据类型：installed-notice
 
@@ -15115,7 +15115,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ==============================================================================
-zod@4.4.3
+zod@4.6.6
 声明许可证：MIT
 证据类型：installed-notice
 

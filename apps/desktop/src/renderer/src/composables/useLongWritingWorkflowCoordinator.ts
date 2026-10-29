@@ -906,7 +906,7 @@ export function useLongWritingWorkflowCoordinator(
     if (disposed) return;
     disposed = true;
     runExpectation = null;
-    writingOrchestrator.cancel();
+    writingOrchestrator.suspend();
   }
 
   return {

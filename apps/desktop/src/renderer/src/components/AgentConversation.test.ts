@@ -5,8 +5,21 @@ import conversationSource from "./AgentConversation.vue?raw";
 import proposalCardSource from "./AgentEditProposalCard.vue?raw";
 import writingWorkspaceSource from "./WritingWorkspaceModule.vue?raw";
 import subagentSource from "./SubagentRunList.vue?raw";
+import lazySource from "./lazyAppComponents.ts?raw";
 
 describe("AgentConversation edit proposal placement", () => {
+  it("defers conditional review panels without removing approval gates or load failure feedback", () => {
+    for (const name of ["AgentEditProposalCard", "LongProposalReview", "SubagentRunList"]) {
+      expect(conversationSource).not.toContain(`from "./${name}.vue"`);
+      expect(lazySource).toContain(`loader: () => import("./${name}.vue")`);
+    }
+    expect(lazySource).toContain('role: "status"');
+    expect(lazySource).toContain('role: "alert"');
+    expect(lazySource).toContain("attempts < 2");
+    expect(lazySource).toContain("原稿未修改");
+    expect(conversationSource).toContain('v-else-if="item.type === \'edit-proposal\'"');
+    expect(conversationSource).toContain("message.subagentRuns?.length");
+  });
   it("shows target navigation only for accepted approval cards and relays it", () => {
     expect(proposalCardSource).toContain(
       "v-if=\"proposal.status === 'accepted'\""
@@ -393,7 +406,8 @@ describe("AgentConversation edit proposal placement", () => {
   });
 
   it("renders subagent runs via a shared collapsed card list", () => {
-    expect(conversationSource).toContain("import SubagentRunList from");
+    expect(conversationSource).toContain('from "./lazyAppComponents"');
+    expect(lazySource).toContain('loader: () => import("./SubagentRunList.vue")');
     expect(conversationSource).toContain("<SubagentRunList");
     expect(subagentSource).toContain('class="subagent-run-list"');
     expect(subagentSource).toContain('class="subagent-run-card"');

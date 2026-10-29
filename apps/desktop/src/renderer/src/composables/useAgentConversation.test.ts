@@ -801,6 +801,25 @@ afterEach(() => {
 });
 
 describe("agent conversation controller", () => {
+  it("adds enabled author preferences and the associated book topic to actual writing requests while preserving the visible user message", async () => {
+    const values = new Map<string, string>();
+    values.set("inkhub-author-preferences-v1", JSON.stringify([{ id: "pref_voice", label: "声音", content: "用动作呈现情绪", scopes: ["short"], enabled: true }]));
+    values.set("inkhub-topic-archive-v1", JSON.stringify([{ id: "topic_voice", title: "雨夜来信", genre: "悬疑", audience: "推理读者", promise: "逐步揭开信件谜题", conflict: "信任的代价", status: "developing", updatedAt: "2026-10-29", evidence: [], bookLink: { bookId: "short_story_1", title: "雨夜来信", workspaceType: "short" } }]));
+    vi.stubGlobal("localStorage", { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) });
+    const deferred = createDeferredApi();
+    const controller = useAgentConversation({ api: () => deferred.api, idleTimeoutMs: 10_000 });
+    const documents = createShortWorkspaceDocuments();
+    controller.draft.value = "设计下一场对话";
+    const sending = controller.sendMessage(documents[0]!, documents);
+    await vi.waitFor(() => expect(deferred.prompts).toHaveLength(1));
+    expect(deferred.prompts[0]?.message).toContain("用动作呈现情绪");
+    expect(deferred.prompts[0]?.message).toContain("逐步揭开信件谜题");
+    expect(controller.messages.value.find(({ role }) => role === "user")?.content).toBe("设计下一场对话");
+    deferred.resolveAccepted(0, { sessionId: controller.sessionId.value, runId: "run_preferences", acceptedAt: new Date().toISOString(), runtime });
+    await sending;
+    controller.dispose();
+  });
+
   it("adds and replaces edit proposals with deep-cloned diff state", () => {
     const controller = useAgentConversation({ api: () => undefined });
     controller.messages.value = [{

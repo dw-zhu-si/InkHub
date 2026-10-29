@@ -358,6 +358,8 @@ onBeforeUnmount(() => {
             writingOrchestrator.state.value.phase ===
             "awaiting_writer_approval"
               ? "等待你审阅本章正文写入提案"
+              : writingOrchestrator.state.value.phase === "paused"
+                ? "计划已保存并暂停；恢复时会重新核对当前章"
               : writingOrchestrator.state.value.phase === "complete"
                 ? "本次计划已完成"
                 : "正在核对文件与保存屏障"
@@ -368,11 +370,18 @@ onBeforeUnmount(() => {
           class="long-writing-workflow-actions"
         >
           <button
-            v-if="writingOrchestrator.state.value.phase === 'error'"
+            v-if="
+              writingOrchestrator.state.value.phase === 'error' ||
+              writingOrchestrator.state.value.phase === 'paused'
+            "
             type="button"
             @click="emit('retryWritingWorkflow')"
           >
-            重试当前章
+            {{
+              writingOrchestrator.state.value.phase === "paused"
+                ? "恢复并复核当前章"
+                : "重试当前章"
+            }}
           </button>
           <button
             type="button"

@@ -2424,9 +2424,24 @@ export function useAgentConversation(
       const selectedModel = configuredModels.value.find(
         (model) => model.id === selectedModelId.value
       );
+      const preferenceScope = contextSnapshot.longWorkspace ? "long"
+        : activeDocument.domain === "creation" && (activeDocument.workspaceType === "short" || activeDocument.workspaceType === "script")
+          ? activeDocument.workspaceType : undefined;
+      let requestMessage = content;
+      if (preferenceScope && typeof localStorage !== "undefined") {
+        const [{ appendAuthorPreferences }, { topicContextForBook }] = await Promise.all([
+          import("../utils/authorPreferences"),
+          import("../utils/topicBookWorkflow")
+        ]);
+        requestMessage = appendAuthorPreferences(content, preferenceScope, localStorage);
+        const bookId = contextSnapshot.longWorkspace?.bookId ?? activeDocument.workspaceId;
+        const topicContext = bookId ? topicContextForBook(localStorage, bookId, preferenceScope) : "";
+        if (topicContext) requestMessage += `\n\n${topicContext}`;
+        if (epoch !== sendEpoch || sessionId.value !== sendSessionId || pendingAttemptId.value !== attemptId) return;
+      }
       const accepted = await api.session.prompt({
         sessionId: sendSessionId,
-        message: content,
+        message: requestMessage,
         ...(requestAttachments.length ? { attachments: requestAttachments } : {}),
         writeApprovalMode: approvalModeByAttempt.get(attemptId),
         ...(selectedModelId.value ? { modelId: selectedModelId.value } : {}),

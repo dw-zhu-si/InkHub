@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  computed,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -13,6 +14,8 @@ import type {
 import type { LongStructureMutationCompletion } from "../types/longWorkspace";
 import AppIcon from "./AppIcon.vue";
 import LongStructureManager from "./LongStructureManager.vue";
+import LongOutlineContentReport from "./LongOutlineContentReport.vue";
+import { assessLongOutlineCompleteness } from "../utils/longOutlineCompleteness";
 
 const props = defineProps<{
   open: boolean;
@@ -51,6 +54,8 @@ const manager = ref<{
   flushAgentsMdIfNeeded(): Promise<boolean>;
 } | null>(null);
 const childModalActive = ref(false);
+const outlineReport = computed(() => props.open && props.snapshot ? assessLongOutlineCompleteness(props.snapshot) : null);
+const visibleOutlineFindings = computed(() => outlineReport.value?.findings.slice(0, 200) ?? []);
 let previousFocus: HTMLElement | null = null;
 
 async function close(): Promise<void> {
@@ -184,6 +189,22 @@ onBeforeUnmount(() =>
             <AppIcon name="close" :size="16" />
           </button>
         </header>
+        <section v-if="outlineReport" class="outline-completeness" aria-label="大纲结构完整性" aria-live="polite">
+          <div class="outline-completeness-summary">
+            <strong>大纲完整性</strong>
+            <span>{{ outlineReport.completeVolumes }} / {{ outlineReport.totalVolumes }} 卷结构齐备</span>
+            <small>{{ outlineReport.totalArcs }} 条剧情弧 · {{ outlineReport.totalStoryBeats }} 个情节点 · {{ outlineReport.totalChapterCards }} 张章卡</small>
+          </div>
+          <details>
+            <summary>{{ outlineReport.findings.length ? `${outlineReport.findings.length} 项待补齐或人工确认` : "结构层级已覆盖，仍需人工审阅内容质量" }}</summary>
+            <ul>
+              <li v-for="finding in visibleOutlineFindings" :key="finding.id" :data-severity="finding.severity">{{ finding.message }}</li>
+              <li v-if="outlineReport.findings.length > visibleOutlineFindings.length">显示前 200 项，请先补齐结构再检查剩余项。</li>
+              <li>数量和关联关系不代表情节质量；请作者人工确认读者承诺、因果、节奏与人物动机。</li>
+            </ul>
+          </details>
+        </section>
+        <LongOutlineContentReport v-if="snapshot" :open="open" :snapshot="snapshot" />
         <LongStructureManager
           v-if="snapshot"
           ref="manager"
@@ -211,7 +232,7 @@ onBeforeUnmount(() =>
 
 .long-structure-dialog {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   width: min(1040px, 96vw);
   max-height: min(880px, 92vh);
   overflow: hidden;
@@ -222,6 +243,16 @@ onBeforeUnmount(() =>
     color-mix(in srgb, var(--text-primary) 18%, transparent);
   color: var(--text-primary);
 }
+
+.outline-completeness { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:10px 18px; border-bottom:1px solid var(--theme-line); background:var(--surface-subtle, var(--surface-main)); }
+.outline-completeness-summary { display:grid; grid-template-columns:auto auto; gap:2px 12px; align-items:baseline; }
+.outline-completeness-summary strong { grid-row:span 2; }
+.outline-completeness-summary small { color:var(--text-secondary); }
+.outline-completeness details { max-width:55%; color:var(--text-secondary); }
+.outline-completeness summary { cursor:pointer; }
+.outline-completeness ul { max-height:160px; overflow:auto; margin:8px 0 0; padding-left:20px; }
+.outline-completeness li[data-severity="action"] { color:var(--text-primary); }
+@media(max-width:700px) { .outline-completeness { align-items:flex-start; flex-direction:column; }.outline-completeness details { max-width:100%; } }
 
 .long-structure-dialog.is-suspended {
   visibility: hidden;

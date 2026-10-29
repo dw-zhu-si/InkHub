@@ -15,6 +15,9 @@ InkHub is not an official DeepWrite release and is not endorsed by the upstream 
 - **Visual workflows**: create cover artwork for platform-specific dimensions, with title and author typography composed locally; plan illustrations for short stories.
 - **Multiple model providers**: use ModelHub or connect OpenAI, Anthropic, Google Gemini, DeepSeek, Qwen, Doubao, Zhipu, Kimi, MiniMax, OpenRouter, Ollama, LM Studio, and compatible APIs directly.
 - **Local search and resumable jobs**: search manuscript text with SQLite FTS5/BM25; long-running jobs save checkpoints and can be cancelled or resumed after failure or restart.
+- **Topics linked to books**: record reader promises, conflicts and evidence, prefill book creation or link an existing book, and include its topic archive in writing context.
+- **Book health and planning checks**: compare source, index, facts and summary freshness; identify empty or placeholder mainlines and chapter cards without claiming to assess literary quality.
+- **Cross-book author preferences**: edit and enable preferences by short-story, script or long-novel scope, providing low-priority reference for subsequent applicable AI writing requests.
 
 ## ModelHub and direct providers
 

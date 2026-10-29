@@ -18,6 +18,7 @@ import type {
   InkHubDeepQualityReport,
   InkHubDeepQualityTask,
   InkHubStoryContinuationResult,
+  InkHubStoryFactCategory,
   InkHubStoryForecastResult,
   InkHubStoryReconstructionProgress,
   InkHubStoryStateSnapshot
@@ -76,6 +77,9 @@ const aiRepairTask = ref<InkHubNovelAiRepairTask | null>(null);
 const aiResumeMode = ref(false);
 const lastReaudit = ref<NonNullable<InkHubNovelBatchRepairResult["reaudit"]> | null>(null);
 const storyState = ref<InkHubStoryStateSnapshot | null>(null);
+const storyFactQuery = ref("");
+const storyFactCategory = ref<InkHubStoryFactCategory | "all">("all");
+const storyFactVolume = ref("all");
 const storyProgress = ref<InkHubStoryReconstructionProgress | null>(null);
 const storyAction = ref<"reconstruct" | "continuation" | "forecast" | null>(null);
 const storyBusy = ref(false);
@@ -111,6 +115,27 @@ const progressPercent = computed(() => {
   return Math.round(((activeChapter.value.ordinal + 1) / summary.value.chapterCount) * 100);
 });
 const paragraphs = computed(() => chapterContent.value.split(/\n\s*\n/u).filter((paragraph) => paragraph.trim()));
+const storyFactCategoryLabels: Record<InkHubStoryFactCategory, string> = {
+  character: "人物",
+  event: "事件",
+  relationship: "关系",
+  location: "地点",
+  item: "物品",
+  knowledge: "知识边界",
+  foreshadowing: "伏笔"
+};
+const storyFactVolumes = computed(() => [...new Set((storyState.value?.chapters ?? [])
+  .map(({ volumeTitle }) => volumeTitle?.trim() || "未分卷"))]);
+const visibleStoryFacts = computed(() => {
+  const query = storyFactQuery.value.trim().toLocaleLowerCase();
+  return (storyState.value?.facts ?? []).filter((fact) => {
+    if (storyFactCategory.value !== "all" && fact.category !== storyFactCategory.value) return false;
+    if (storyFactVolume.value !== "all" && !fact.evidence.some((item) => (item.volumeTitle?.trim() || "未分卷") === storyFactVolume.value)) return false;
+    if (!query) return true;
+    const haystack = `${fact.subject} ${fact.predicate} ${fact.object}`.toLocaleLowerCase();
+    return haystack.includes(query);
+  });
+});
 const volumeGroups = computed(() => {
   const groups = new Map<string, { key: string; title: string; chapters: Array<{ chapter: InkHubNovelChapter; localOrdinal: number }> }>();
   for (const chapter of chapters.value) {
@@ -904,6 +929,23 @@ onBeforeUnmount(() => {
           <header><div><span>结构化创作内核</span><strong id="story-kernel-title">{{ storyState?.summary.message || '尚未构建故事状态' }}</strong></div><small v-if="storyState">{{ storyState.summary.analyzedChapters }}/{{ storyState.summary.totalChapters }} 章 · {{ storyState.summary.factCount }} 条事实 · 本次复用 {{ storyState.summary.reusedChapters }} 章</small></header>
           <progress v-if="storyProgress?.totalChapters && storyBusy" :value="storyProgress.completedChapters" :max="storyProgress.totalChapters">{{ storyProgress.completedChapters }}/{{ storyProgress.totalChapters }}</progress>
           <p v-if="storyProgress && storyBusy">{{ storyProgress.message }}</p>
+          <section v-if="storyState?.summary.status === 'ready' || storyState?.summary.status === 'partial'" class="story-fact-browser" aria-labelledby="story-facts-title">
+            <header><div><span>来源可追溯的全书状态</span><h3 id="story-facts-title">人物、关系与剧情事实</h3></div><small>{{ visibleStoryFacts.length }} / {{ storyState.facts.length }} 条</small></header>
+            <div class="story-fact-filters">
+              <label><span class="sr-only">筛选故事事实</span><input v-model="storyFactQuery" type="search" maxlength="200" placeholder="搜索人物、关系、事件或原文证据" /></label>
+              <label><span class="sr-only">按类型筛选故事事实</span><select v-model="storyFactCategory"><option value="all">全部类型</option><option v-for="(label, category) in storyFactCategoryLabels" :key="category" :value="category">{{ label }}</option></select></label>
+              <label><span class="sr-only">按卷筛选故事事实</span><select v-model="storyFactVolume"><option value="all">全部卷</option><option v-for="volume in storyFactVolumes" :key="volume" :value="volume">{{ volume }}</option></select></label>
+            </div>
+            <div v-if="visibleStoryFacts.length" class="story-fact-list">
+              <article v-for="fact in visibleStoryFacts.slice(0, 200)" :key="fact.id">
+                <div><span>{{ storyFactCategoryLabels[fact.category] }}</span><strong>{{ fact.subject }} · {{ fact.predicate }} · {{ fact.object }}</strong><small>{{ fact.status === 'uncertain' ? '待核实' : fact.status === 'resolved' ? '已结束' : fact.status === 'superseded' ? '已被后续事实取代' : '正文支持' }} · 置信度 {{ Math.round(fact.confidence * 100) }}%</small></div>
+                <details><summary>{{ fact.evidence.length }} 条原文依据</summary><blockquote v-for="evidence in fact.evidence" :key="`${evidence.chapterId}:${evidence.startOffset}`"><p>{{ evidence.excerpt }}</p><button type="button" @click="openChapter(evidence.chapterId, evidence.startOffset)">{{ evidence.volumeTitle ? `${evidence.volumeTitle} · ` : '' }}{{ evidence.chapterTitle }} · 定位原文</button></blockquote></details>
+              </article>
+              <p v-if="visibleStoryFacts.length > 200" class="limit-note">为保持界面流畅，当前只显示前 200 条；缩小搜索范围可继续查看。</p>
+            </div>
+            <p v-else class="pane-empty">没有符合当前条件的故事事实。</p>
+            <small class="story-fact-note">这些是模型从索引原文提取的候选事实，不会自动改写人物设定或原稿；请通过证据章节核对，低置信或不确定条目不应视为正史。</small>
+          </section>
           <div class="story-generator-grid">
             <section>
               <h3>应用内续写草稿</h3>
@@ -1016,6 +1058,7 @@ onBeforeUnmount(() => {
 .ai-repair-status { display: grid; gap: 9px; width: min(900px, 100%); margin: 0 auto 18px; padding: 14px 16px; border: 1px solid var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised)); }.ai-repair-status.failed { border-color: var(--danger, #b84a4a); background: color-mix(in srgb, var(--danger, #b84a4a) 7%, var(--surface-raised)); }.ai-repair-status > div { display: grid; gap: 4px; }.ai-repair-status span,.ai-repair-status small { color: var(--text-secondary); line-height: 1.55; }.ai-repair-status progress { width: 100%; accent-color: var(--accent); }
 .task-actions { display: flex !important; flex-wrap: wrap; gap: 8px; }.task-actions button,.story-kernel-panel button { min-height: 36px; padding: 0 12px; border: 1px solid var(--accent); border-radius: 9px; color: var(--accent-contrast, white); background: var(--accent); }.task-actions button:last-child { color: var(--danger, #b84a4a); border-color: var(--danger, #b84a4a); background: transparent; }
 .story-kernel-panel { display: grid; gap: 14px; width: min(900px, 100%); margin: 0 auto 20px; padding: 18px; border: 1px solid var(--theme-line); border-radius: 15px; background: var(--surface-raised); }.story-kernel-panel > header,.continuation-result > header,.forecast-result > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }.story-kernel-panel > header > div,.continuation-result > header > div { display: grid; gap: 4px; }.story-kernel-panel > header span,.continuation-result > header span,.forecast-result article > span { color: var(--accent-text, var(--accent)); font-size: .7rem; font-weight: 700; }.story-kernel-panel > header small,.continuation-result > header small,.forecast-result > header small { color: var(--text-tertiary); }.story-kernel-panel > progress { width: 100%; accent-color: var(--accent); }.story-kernel-panel > p { margin: 0; color: var(--text-secondary); }
+.story-fact-browser { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--theme-line-soft); border-radius: 12px; background: var(--surface-main); }.story-fact-browser > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }.story-fact-browser > header > div { display: grid; gap: 3px; }.story-fact-browser > header span { color: var(--accent-text, var(--accent)); font-size: .68rem; font-weight: 700; }.story-fact-browser h3 { margin: 0; font: 700 17px/1.4 "Songti SC", serif; }.story-fact-browser > header small,.story-fact-note { color: var(--text-tertiary); }.story-fact-filters { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(140px, 190px)); gap: 8px; }.story-fact-filters input,.story-fact-filters select { width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid var(--theme-line); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); font: inherit; }.story-fact-list { display: grid; gap: 7px; max-height: 520px; overflow: auto; overscroll-behavior: contain; }.story-fact-list > article { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--theme-line-soft); border-radius: 9px; background: var(--surface-raised); }.story-fact-list > article > div { display: grid; gap: 3px; min-width: 0; }.story-fact-list > article > div > span { color: var(--accent-text, var(--accent)); font-size: .67rem; font-weight: 700; }.story-fact-list strong { overflow-wrap: anywhere; line-height: 1.5; }.story-fact-list small { color: var(--text-tertiary); line-height: 1.45; }.story-fact-list details { color: var(--text-secondary); font-size: .75rem; }.story-fact-list summary { cursor: pointer; }.story-fact-list blockquote { margin: 7px 0; padding: 8px 10px; border-left: 2px solid var(--accent); background: var(--surface-main); }.story-fact-list blockquote p { margin: 0 0 7px; color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }.story-fact-list blockquote button { min-height: 30px; font-size: .7rem; }.story-fact-note { line-height: 1.5; }
 .story-generator-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }.story-generator-grid > section { display: grid; align-content: start; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--theme-line-soft); border-radius: 12px; background: var(--surface-main); }.story-generator-grid h3 { margin: 0; font: 700 18px/1.35 "Songti SC", serif; }.story-generator-grid label { display: grid; gap: 5px; color: var(--text-secondary); font-size: .72rem; }.story-generator-grid textarea,.story-generator-grid input,.story-generator-grid select { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--theme-line); border-radius: 8px; outline: 0; color: var(--text-primary); background: var(--surface-raised); font: inherit; }.story-generator-grid textarea { min-height: 86px; resize: vertical; line-height: 1.6; }.story-generator-grid small { color: var(--text-tertiary); line-height: 1.5; }
 .continuation-result,.forecast-result { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 4%, var(--surface-main)); }.continuation-result > textarea { width: 100%; min-height: 320px; resize: vertical; padding: 14px; border: 1px solid var(--theme-line); border-radius: 10px; color: var(--text-primary); background: var(--surface-raised); font: .92rem/1.85 var(--editor-font, "Songti SC", serif); }.continuation-result details { color: var(--text-secondary); line-height: 1.6; }.continuation-result blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--surface-raised); }.forecast-result { grid-template-columns: repeat(2, minmax(0, 1fr)); }.forecast-result > header { grid-column: 1 / -1; }.forecast-result article { padding: 12px; border: 1px solid var(--theme-line-soft); border-radius: 10px; background: var(--surface-raised); }.forecast-result article h3 { margin: 4px 0; }.forecast-result article p,.forecast-result article li { color: var(--text-secondary); line-height: 1.6; }.forecast-result article > div { display: grid; gap: 5px; color: var(--text-tertiary); }
 .reaudit-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: min(900px, 100%); margin: 0 auto 18px; padding: 12px 16px; border: 1px solid var(--accent); border-radius: 11px; color: var(--text-secondary); background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised)); }.reaudit-summary strong { color: var(--text-primary); white-space: nowrap; }
@@ -1028,6 +1071,6 @@ onBeforeUnmount(() => {
 .index-warning { display: flex; gap: 10px; padding: 9px clamp(18px, 3vw, 42px); border-top: 1px solid var(--theme-line); color: var(--text-secondary); background: var(--surface-muted); font-size: .72rem; }.index-warning strong { color: var(--text-primary); white-space: nowrap; }
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }button:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 1100px) { .workflow-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 820px) { .reader-header { grid-template-columns: auto minmax(0, 1fr); }.reader-progress { display: none; }.reader-tabs { flex-wrap: wrap; }.reader-tabs .rebuild-button { margin-left: 0; }.reader-layout { grid-template-columns: 210px minmax(0, 1fr); }.workflow-actions,.repair-comparison,.story-generator-grid,.forecast-result { grid-template-columns: 1fr; }.reading-article { width: min(680px, calc(100% - 30px)); }.reader-header > div:nth-child(2) { text-align: right; }.ai-repair-review > header,.ai-repair-review article > header,.ai-repair-review > footer,.review-batch-actions,.story-kernel-panel > header,.continuation-result > header,.reaudit-summary { align-items: stretch; flex-direction: column; }.review-batch-actions > div:last-child { justify-content: stretch; }.review-batch-actions button { flex: 1 1 auto; } }
+@media (max-width: 820px) { .reader-header { grid-template-columns: auto minmax(0, 1fr); }.reader-progress { display: none; }.reader-tabs { flex-wrap: wrap; }.reader-tabs .rebuild-button { margin-left: 0; }.reader-layout { grid-template-columns: 210px minmax(0, 1fr); }.workflow-actions,.repair-comparison,.story-generator-grid,.forecast-result { grid-template-columns: 1fr; }.story-fact-filters { grid-template-columns: 1fr; }.reading-article { width: min(680px, calc(100% - 30px)); }.reader-header > div:nth-child(2) { text-align: right; }.ai-repair-review > header,.ai-repair-review article > header,.ai-repair-review > footer,.review-batch-actions,.story-kernel-panel > header,.story-fact-browser > header,.continuation-result > header,.reaudit-summary { align-items: stretch; flex-direction: column; }.review-batch-actions > div:last-child { justify-content: stretch; }.review-batch-actions button { flex: 1 1 auto; } }
 @media (max-width: 620px) { .reader-layout { grid-template-columns: 1fr; }.chapter-sidebar { position: absolute; z-index: 2; width: min(78vw, 300px); height: calc(100% - 112px); box-shadow: 14px 0 30px rgba(0,0,0,.12); }.reading-pane { margin-left: 56px; }.reader-tabs button { flex: 1 1 auto; }.reader-tabs .rebuild-button { flex-basis: 100%; } }
 </style>
